@@ -1,0 +1,1234 @@
+# openlcc-sale.yaml - Verkaufsversion ohne persoenliche Spezifika.
+# Separate Kopie von openlcc.yaml (Stand: 2026-09-05). Aenderungen an openlcc.yaml
+# muessen hier manuell nachgezogen werden.
+# Unterschied zu openlcc.yaml: kein wifi.use_address (persoenliche, feste IP
+# per DHCP-Reservierung an Lars gebunden - fuer Kaeuferboards ohne Bedeutung).
+# WLAN- und API-Encryption-Key kommen weiterhin aus secrets.yaml und muessen
+# fuer jedes verkaufte Board individuell (frischer api_key, z.B. via
+# openssl rand -base64 32) gesetzt werden, bevor geflasht wird.
+
+external_components:
+  # Lokale, gepatchte Kopie (Fix: #include "esp_random.h" fuer ESP-IDF >= 5.x,
+  # Original: https://github.com/open-lcc/esphome-lcc-bianca-component)
+  - source:
+      type: local
+      path: open-lcc/components
+# Uncomment if using Acaia
+#  - source:
+#      type: git
+#      url: https://github.com/open-lcc/esphome-acaia-component
+# Uncomment if using Pressensor
+#  - source:
+#      type: git
+#      url: https://github.com/open-lcc/esphome-pressensor-component
+# Not needed for OLED build (TFT-only driver):
+#  - source:
+#      type: git
+#      url: https://github.com/open-lcc/esphome-st7789v-fast
+# Adding the following component will make your firmware GPL Licensed
+#  - source:
+#      type: git
+#      url: https://github.com/open-lcc/esphome-stream-server
+
+esphome:
+  project:
+    name: open-lcc.bianca
+    version: 0.0.1
+  name: smart-lcc
+  name_add_mac_suffix: false
+  platformio_options:
+    build_flags:
+      - -O2
+    build_unflags:
+      - -Os
+      - -Werror=all
+    board_build.flash_mode: dio
+    board_build.partitions: "../../../open-lcc/custom_partitions.csv"
+
+esp32:
+  board: esp32-s3-devkitc-1
+  flash_size: 16MB
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      CONFIG_ESP_TLS_INSECURE: y
+      CONFIG_ESP_TLS_SKIP_SERVER_CERT_VERIFY: y
+
+psram:
+  mode: octal
+  speed: 80MHz
+
+wifi:
+  id: wifi_component
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  # use_address bewusst weggelassen: das war Lars persoenliche, per
+  # DHCP-Reservierung gebundene IP aus openlcc.yaml - fuer Kaeuferboards ohne
+  # Bedeutung. Ohne diese Zeile laeuft ESPHome ganz normal ueber DHCP + mDNS
+  # (*.local).
+  # [MOD] ESPHome fährt den ESP32 sonst in einen WLAN-Sparmodus, der bei
+  # schwachem Signal die Latenz hochzieht. Bei rund -90 dBm kontraproduktiv.
+  power_save_mode: NONE
+  # [MOD] Notzugang. captive_portal: stand schon in der Datei, ohne ap: aber
+  # ohne Funktion - ESPHome warnte beim Build entsprechend. Kommt das Board
+  # nicht ins konfigurierte WLAN, spannt es nach dem Timeout dieses eigene
+  # Netz auf; im Browser fuehrt dann jede Adresse auf die Einrichtungsseite.
+  # Fuer die Verkaufssaetze der eigentliche Zweck: der Kaeufer traegt sein
+  # WLAN selbst ein, ohne die Firmware neu bauen zu muessen.
+  ap:
+    ssid: "Smart-LCC Setup"
+    password: "openlcc123"
+
+# Uncomment if using Acaia or Pressensor, and replace with your MAC Addresses
+#ble_client:
+# Uncomment for Acaia
+#  - mac_address: 00:11:22:33:44:55
+#    id: acaia_client
+# Uncomment for Pressensor
+#  - mac_address: 66:77:88:99:AA:BB
+#    id: pressensor_id
+
+# ESPHome >= 2024.2 verlangt eine explizite Plattform fuer ota:
+ota:
+  - platform: esphome
+    on_begin:
+      then:
+        - open_lcc.bianca.hard_bail: lcc_1
+        - delay: 3s
+
+uart:
+  baud_rate: 115200
+  tx_pin: GPIO17
+  rx_pin: GPIO18
+
+esp32_ble_tracker:
+
+
+# If using the Acaia integration, uncomment this
+
+#acaia:
+#  ble_client_id: acaia_client
+#  id: acaia_1
+
+
+# If using the Pressensor integration, uncomment this
+
+#pressensor:
+#  ble_client_id: pressensor_id
+
+# Stream server is GPL licensed. It's very useful, but if you uncomment this, your firmware becomes GPL licensed.
+
+stream_server:
+  buffer_size: 2048
+
+output:
+  - platform: gpio
+    pin:
+      number: GPIO4
+      mode:
+        output: true
+    id: rp2040_en
+  - platform: gpio
+    pin:
+      number: GPIO6
+      mode:
+        output: true
+    id: rp2040_serial_boot
+  - platform: gpio
+    pin:
+      number: GPIO5
+      mode:
+        output: true
+        open_drain: true
+    id: rp2040_bootsel
+
+switch:
+  - platform: output
+    id: rp2040_serial_boot_sw
+    name: "RP2040 Serial Boot"
+    web_server:
+      sorting_group_id: grp_diag
+      sorting_weight: 120
+    output: 'rp2040_serial_boot'
+    restore_mode: ALWAYS_ON
+    internal: true
+  - platform: output
+    id: rp2040_bootsel_sw
+    name: "RP2040 Bootsel"
+    web_server:
+      sorting_group_id: grp_diag
+      sorting_weight: 130
+    output: 'rp2040_bootsel'
+    restore_mode: ALWAYS_ON
+    internal: true
+  # Order matters here, enable needs to be after serial boot and bootsel
+  - platform: output
+    id: rp2040_en_sw
+    name: "RP2040 Enable"
+    web_server:
+      sorting_group_id: grp_diag
+      sorting_weight: 140
+    output: 'rp2040_en'
+    restore_mode: ALWAYS_ON
+    internal: true
+  - platform: open_lcc_bianca
+    eco_mode:
+      id: eco_mode_sw
+      name: Eco Mode
+      icon: "mdi:leaf"
+      web_server:
+        sorting_group_id: grp_betrieb
+        sorting_weight: 110
+    sleep_mode:
+      id: sleep_mode_sw
+      name: Sleep Mode
+      icon: "mdi:sleep"
+      web_server:
+        sorting_group_id: grp_betrieb
+        sorting_weight: 120
+      # [MOD] OLED im Schlafmodus abschalten. Nicht nur Strom: ein statisches
+      # Layout brennt sich auf Dauer in ein OLED ein.
+      on_turn_on:
+        then:
+          - lambda: 'id(my_oled)->turn_off();'
+      on_turn_off:
+        then:
+          - lambda: 'id(my_oled)->turn_on();'
+    low_flow_mode:
+      id: low_flow_sw
+      name: Low Flow
+      icon: "mdi:water-minus"
+      web_server:
+        sorting_group_id: grp_betrieb
+        sorting_weight: 130
+  # [MOD] Praeinfusion ein/aus - reiner Merker, steuert nichts direkt
+  # [MOD] Kalibrierbild: zeigt einen einzelnen Rahmen mit dem Abstand aus
+  # "Calibration Inset" und diesen Wert gross in der Mitte. Damit laesst sich
+  # ausmessen, welcher Teil des 128x64-Displays hinter der Gehaeuseblende
+  # ueberhaupt sichtbar ist - Wert hochdrehen, bis eine Kante auftaucht.
+  - platform: template
+    name: "Calibration Frame"
+    id: calib_sw
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    entity_category: "config"
+    icon: "mdi:border-all-variant"
+    web_server:
+      sorting_group_id: grp_diag
+      sorting_weight: 4
+  # [MOD] Dreht die Ausfuehrlichkeit zur Laufzeit hoch. Spart Datenverkehr
+  # ueber die schwache WLAN-Strecke, solange man nicht wirklich zuschaut.
+  - platform: template
+    name: "Verbose Log"
+    id: verbose_log
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    entity_category: "config"
+    icon: "mdi:text-box-search-outline"
+    web_server:
+      sorting_group_id: grp_diag
+      sorting_weight: 5
+    on_turn_on:
+      - logger.set_level: DEBUG
+    on_turn_off:
+      - logger.set_level: WARN
+  - platform: template
+    name: "Pre-Infusion"
+    web_server:
+      sorting_group_id: grp_preinf
+      sorting_weight: 10
+    id: preinf_on
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    icon: "mdi:water-outline"
+
+# Uncomment if using Pressensor
+#  - platform: ble_client
+#    ble_client_id: pressensor_id
+#    name: "Enable Pressensor"
+
+open_lcc_bianca:
+  id: lcc_1
+
+# [MOD] Welcher Weg die Praeinfusion faehrt
+select:
+  - platform: template
+    name: "Pre-Infusion Mode"
+    web_server:
+      sorting_group_id: grp_preinf
+      sorting_weight: 20
+    id: preinf_mode
+    icon: "mdi:water-sync"
+    options:
+      - "Firmware routine"
+      - "ESP timer"
+    initial_option: "Firmware routine"
+    optimistic: true
+    restore_value: true
+    entity_category: "config"
+  # [MOD] Sprache der Displaytexte. Wirkt ausschliesslich auf das OLED.
+  # Die Namen der Entitaeten sind in ESPHome fest einkompiliert und lassen
+  # sich zur Laufzeit nicht umschalten - die bleiben deshalb englisch und
+  # werden bei Bedarf in Home Assistant selbst umbenannt.
+  - platform: template
+    name: "Display Language"
+    web_server:
+      sorting_group_id: grp_config
+      sorting_weight: 5
+    id: lang_sel
+    icon: "mdi:translate"
+    options:
+      - "English"
+      - "Deutsch"
+    initial_option: "English"
+    optimistic: true
+    restore_value: true
+    entity_category: "config"
+
+# [MOD] Eigene Zeitsteuerung: Leitungsdruck fuer N Sekunden, dann Vollfluss.
+# mode: restart, damit ein zweiter Bezugsstart den alten Ablauf abloest.
+script:
+  - id: preinfusion
+    mode: restart
+    then:
+      - switch.turn_on: low_flow_sw
+      - delay: !lambda 'return (uint32_t)(id(preinf_time).state * 1000);'
+      - switch.turn_off: low_flow_sw
+
+logger:
+  # [MOD] level ist der Compile-Filter (was ueberhaupt in der Firmware landet),
+  # initial_level der Startzustand nach dem Booten. Normalbetrieb also leise,
+  # ueber den Schalter "Ausfuehrliches Log" zur Laufzeit auf DEBUG hochdrehbar.
+  level: DEBUG
+  initial_level: WARN
+
+# [MOD] Merker fuer den Timer-Nachlauf nach dem Bezug
+globals:
+  - id: brew_end_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: brew_start_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  # [MOD] Bezugszaehler. restore_value liegt im Flash und ueberlebt Neustarts.
+  # Geschrieben wird nur einmal pro Bezug - fuer den Flash unkritisch.
+  - id: shots_total
+    type: uint32_t
+    restore_value: yes
+    initial_value: '0'
+  - id: shots_reset
+    type: uint32_t
+    restore_value: yes
+    initial_value: '0'
+  # [MOD] Nachbau der Original-Anzeige: kurzes "OK" beim Erreichen von "Warm"
+  - id: was_warm
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: warm_ok_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  # [MOD] Merker: war dieser Bezug ueberhaupt ein echter Bezug? Bei leerem
+  # Tank sperrt die Firmware die Pumpe, der Bruehschalter meldet aber
+  # weiterhin "brewing". Ohne diesen Merker liefe der Timer los und der
+  # Zaehler wuerde einen Bezug buchen, der nie stattgefunden hat.
+  - id: shot_valid
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+text_sensor:
+  - platform: open_lcc_bianca
+    status:
+      id: status
+      name: LCC Status
+      icon: "mdi:state-machine"
+      # [MOD] Nur die Flanke nach "Warm" merken. Die 15-Sekunden-Sperre
+      # verhindert, dass die Meldung direkt nach jedem Neustart erscheint.
+      on_value:
+        - lambda: |-
+            bool warm = (x == "Warm");
+            if (warm && !id(was_warm) && millis() > 15000) {
+              id(warm_ok_ms) = millis();
+            }
+            id(was_warm) = warm;
+      web_server:
+        sorting_group_id: grp_betrieb
+        sorting_weight: 10
+#  - platform: ble_scanner
+#    name: "BLE Devices Scanner"
+
+binary_sensor:
+  - platform: template
+    name: "Template Currently Brewing"
+    web_server:
+      sorting_group_id: grp_diag
+      sorting_weight: 150
+    internal: true
+    id: templ_brewing
+    # on_press/on_release entfernt: display-Seitenumschaltung existiert nur beim TFT,
+    # das OLED nutzt eine einzelne Lambda ohne pages
+  - platform: open_lcc_bianca
+    brewing:
+      name: Currently Brewing
+      icon: "mdi:coffee"
+      web_server:
+        sorting_group_id: grp_betrieb
+        sorting_weight: 70
+      id: brewing
+      # [MOD] internal entfernt - Grundlage fuer Automatisierungen in HA
+      on_state:
+        - binary_sensor.template.publish:
+            id: templ_brewing
+            state: !lambda 'return x;'
+      # [MOD] Bezugsbeginn merken und ggf. Praeinfusion starten
+      on_press:
+        - lambda: |-
+            id(brew_start_ms) = millis();
+            // Bei leerem Tank laeuft die Pumpe nicht - dann ist das kein Bezug.
+            id(shot_valid) = !id(water_low_sens).state;
+        - if:
+            condition:
+              and:
+                - switch.is_on: preinf_on
+                - lambda: 'return id(shot_valid);'
+            then:
+              - if:
+                  condition:
+                    lambda: |-
+                      // Option 0 = "Firmware-Routine". Select::state gibt es
+                      // ab ESPHome 2026.8 nicht mehr, active_index() ersetzt es.
+                      auto i = id(preinf_mode).active_index();
+                      return i.has_value() && i.value() == 0;
+                  then:
+                    - open_lcc.bianca.enqueue_routine: lcc_1
+                  else:
+                    - script.execute: preinfusion
+      # [MOD] Bezugsende: Timer-Nachlauf, Praeinfusion sicher beenden, Zaehler
+      on_release:
+        - lambda: 'id(brew_end_ms) = millis();'
+        - if:
+            condition:
+              lambda: |-
+                // Option 1 = "ESP-Zeit"
+                auto i = id(preinf_mode).active_index();
+                return i.has_value() && i.value() == 1;
+            then:
+              # Abbruch mitten in der Praeinfusion: immer auf Vollfluss zurueck
+              - script.stop: preinfusion
+              - switch.turn_off: low_flow_sw
+        - lambda: |-
+            uint32_t dauer = (id(brew_end_ms) - id(brew_start_ms)) / 1000;
+            // shot_valid faellt weg, sobald waehrend des Bezugs der Tank
+            // leer meldet - dann wurde ab da nichts mehr gefoerdert.
+            if (id(shot_valid) && dauer >= (uint32_t) id(shot_min_s).state) {
+              id(shots_total) += 1;
+              id(shots_reset) += 1;
+            }
+        - component.update: shots_total_sens
+        - component.update: shots_reset_sens
+    filling_service_boiler:
+      name: Filling Service Boiler
+      icon: "mdi:water-pump"
+      web_server:
+        sorting_group_id: grp_diag
+        sorting_weight: 60
+      id: filling_service_boiler_sens
+      internal: true
+    water_tank_low:
+      name: Water Tank Low
+      web_server:
+        sorting_group_id: grp_betrieb
+        sorting_weight: 100
+      id: water_low_sens
+      # [MOD] internal entfernt - der Wasseralarm gehoert nach Home Assistant,
+      # damit man sich benachrichtigen lassen kann. device_class: problem
+      # laesst ihn dort als Stoerung statt als An/Aus erscheinen.
+      device_class: problem
+      # [MOD] Geht der Tank mitten im Bezug leer, ist der Rest kein Bezug mehr
+      on_press:
+        - lambda: 'id(shot_valid) = false;'
+    brew_boiler_heating:
+      name: Brew Boiler Heating
+      icon: "mdi:fire"
+      web_server:
+        sorting_group_id: grp_diag
+        sorting_weight: 62
+      id: brew_boiler_on
+      # [MOD] wieder internal: Die Firmware regelt ueber ein Tastverhaeltnis
+      # (25 Zeitscheiben), der Sensor kippt deshalb im Sekundentakt. In Home
+      # Assistant ist das Rauschen. Bleibt in der Weboberflaeche sichtbar und
+      # versorgt weiterhin die B/S-Anzeige auf dem Display.
+      device_class: heat
+      internal: true
+    service_boiler_heating:
+      name: Service Boiler Heating
+      icon: "mdi:fire"
+      web_server:
+        sorting_group_id: grp_diag
+        sorting_weight: 64
+      id: service_boiler_on
+      # [MOD] wieder internal - siehe Brew Boiler Heating
+      device_class: heat
+      internal: true
+# Uncomment if using Pressensor
+#  - platform: pressensor
+#    connected:
+#      name: Pressensor Connected
+#      id: pressensor_connected
+#      internal: true
+# Uncomment if using Acaia
+#  - platform: acaia
+#    connected:
+#      name: Acaia Connected
+#      id: acaia_connected
+#      internal: true
+# Uncomment if using Stream server
+  - platform: stream_server
+    connected:
+      name: UART Bridge connected
+      web_server:
+        sorting_group_id: grp_diag
+        sorting_weight: 70
+      internal: true
+      on_press:
+        then:
+          - open_lcc.bianca.disable: lcc_1
+      on_release:
+        then:
+          - open_lcc.bianca.enable: lcc_1
+  - platform: gpio
+    pin:
+      number: GPIO38
+      inverted: true
+      mode:
+        input: true
+        pullup: true
+    on_press:
+      then:
+        - number.increment: coffee_set_point
+    internal: true
+    name: "Plus button"
+    web_server:
+      sorting_group_id: grp_diag
+      sorting_weight: 80
+  - platform: gpio
+    pin:
+      number: GPIO21
+      inverted: true
+      mode:
+        input: true
+        pullup: true
+    on_press:
+      then:
+        - number.decrement: coffee_set_point
+    internal: true
+    name: "Minus button"
+    web_server:
+      sorting_group_id: grp_diag
+      sorting_weight: 90
+
+button:
+  - platform: template
+    name: "Reboot RP2040 to BOOTSEL"
+    web_server:
+      sorting_group_id: grp_diag
+      sorting_weight: 110
+    on_press:
+      - open_lcc.bianca.hard_bail: lcc_1
+      - delay: 3s
+      - switch.turn_off: rp2040_en_sw
+      - delay: 500ms
+      - switch.turn_off: rp2040_bootsel_sw
+      - delay: 1s
+      - switch.turn_on: rp2040_en_sw
+      - delay: 2s
+      - switch.turn_on: rp2040_bootsel_sw
+    entity_category: "diagnostic"
+  - platform: template
+    name: "Reboot RP2040 to Serial Boot"
+    web_server:
+      sorting_group_id: grp_diag
+      sorting_weight: 100
+    on_press:
+      - open_lcc.bianca.hard_bail: lcc_1
+      - delay: 3s
+      - switch.turn_off: rp2040_en_sw
+      - delay: 500ms
+      - switch.turn_off: rp2040_serial_boot_sw
+      - delay: 1s
+      - switch.turn_on: rp2040_en_sw
+      - delay: 2s
+      - switch.turn_on: rp2040_serial_boot_sw
+    entity_category: "diagnostic"
+  - platform: template
+    name: "Enqueue Routine"
+    web_server:
+      sorting_group_id: grp_preinf
+      sorting_weight: 40
+    on_press:
+      - open_lcc.bianca.enqueue_routine: lcc_1
+  # [MOD] Nur der ruecksetzbare Zaehler, der Gesamtzaehler bleibt
+  - platform: template
+    name: "Reset Shot Counter"
+    icon: "mdi:counter"
+    web_server:
+      sorting_group_id: grp_zaehler
+      sorting_weight: 40
+    entity_category: "config"
+    on_press:
+      - lambda: 'id(shots_reset) = 0;'
+      - component.update: shots_reset_sens
+
+number:
+  - platform: open_lcc_bianca
+    coffee_boiler_temperature_offset:
+      id: bbto
+      name: Coffee Boiler Temperature Offset
+      icon: "mdi:tune"
+      web_server:
+        sorting_group_id: grp_config
+        sorting_weight: 10
+      mode: box
+      entity_category: "config"
+    auto_sleep_after:
+      id: asa
+      name: Auto Sleep After
+      icon: "mdi:sleep"
+      web_server:
+        sorting_group_id: grp_config
+        sorting_weight: 20
+      mode: box
+      entity_category: "config"
+    coffee_boiler_temperature_set_point:
+      id: coffee_set_point
+      name: Coffee boiler set point
+      icon: "mdi:target"
+      web_server:
+        sorting_group_id: grp_betrieb
+        sorting_weight: 30
+      mode: box
+    service_boiler_temperature_set_point:
+      id: service_set_point
+      name: Service boiler set point
+      icon: "mdi:target"
+      web_server:
+        sorting_group_id: grp_betrieb
+        sorting_weight: 50
+      mode: box
+  # [MOD] Nur fuers Kalibrierbild: Abstand des einzelnen Rahmens vom Displayrand.
+  # Hochdrehen, bis eine Kante sichtbar wird - der Wert steht gross im Bild.
+  - platform: template
+    name: "Calibration Inset"
+    icon: "mdi:arrow-expand-all"
+    id: calib_inset
+    min_value: 0
+    max_value: 30
+    step: 1
+    mode: box
+    optimistic: true
+    restore_value: true
+    initial_value: 0
+    entity_category: "config"
+    web_server:
+      sorting_group_id: grp_diag
+      sorting_weight: 3
+  # [MOD] Dauer der Praeinfusion, nur im Modus "ESP-Zeit" wirksam
+  - platform: template
+    name: "Pre-Infusion Time"
+    icon: "mdi:timer-outline"
+    web_server:
+      sorting_group_id: grp_preinf
+      sorting_weight: 30
+    id: preinf_time
+    min_value: 0
+    max_value: 15
+    step: 0.5
+    unit_of_measurement: "s"
+    mode: box
+    optimistic: true
+    restore_value: true
+    initial_value: 5
+    entity_category: "config"
+  # [MOD] Ab dieser Bezugsdauer zaehlt ein Bezug - haelt Spuelgaenge draussen
+  - platform: template
+    name: "Minimum Shot Duration"
+    icon: "mdi:timer-cog-outline"
+    web_server:
+      sorting_group_id: grp_zaehler
+      sorting_weight: 30
+    id: shot_min_s
+    min_value: 0
+    max_value: 20
+    step: 1
+    unit_of_measurement: "s"
+    mode: box
+    optimistic: true
+    restore_value: true
+    initial_value: 5
+    entity_category: "config"
+
+sensor:
+  - platform: open_lcc_bianca
+    coffee_boiler_temperature:
+      name: Coffee Boiler Temperature
+      icon: "mdi:coffee-maker"
+      web_server:
+        sorting_group_id: grp_betrieb
+        sorting_weight: 20
+      id: coffee_boiler_sens
+    service_boiler_temperature:
+      name: Service Boiler Temperature
+      icon: "mdi:kettle-steam"
+      web_server:
+        sorting_group_id: grp_betrieb
+        sorting_weight: 40
+      id: service_boiler_sens
+    external_temperature_1:
+      name: E61 Outlet Temperature
+      icon: "mdi:thermometer"
+      web_server:
+        sorting_group_id: grp_diag
+        sorting_weight: 40
+      id: outlet_temp_sens
+      # [MOD] internal: ohne MCP9600-Wandler stehen beide dauerhaft auf 0.
+      # Bleiben in der Weboberfläche unter Diagnose sichtbar, tauchen aber
+      # nicht mehr in Home Assistant auf.
+      internal: true
+    external_temperature_2:
+      name: E61 Inlet Temperature
+      icon: "mdi:thermometer"
+      web_server:
+        sorting_group_id: grp_diag
+        sorting_weight: 50
+      id: inlet_temp_sens
+      internal: true
+    auto_sleep_in:
+      name: Auto-sleep in
+      icon: "mdi:timer-sand"
+      web_server:
+        sorting_group_id: grp_config
+        sorting_weight: 30
+      unit_of_measurement: "min"
+      accuracy_decimals: 0
+      filters:
+        - lambda: return x / 60;
+        - or:
+            - throttle: 60s
+            - delta: 0.45
+    current_routine:
+      name: Currently Loaded Routine ID
+      icon: "mdi:script-text-play"
+      web_server:
+        sorting_group_id: grp_preinf
+        sorting_weight: 50
+    current_routine_step:
+      name: Current Routine Step
+      icon: "mdi:debug-step-over"
+      web_server:
+        sorting_group_id: grp_preinf
+        sorting_weight: 60
+    rp2040_uptime:
+      id: rp2040_up
+      name: RP2040 Uptime
+      icon: "mdi:timer-outline"
+      web_server:
+        sorting_group_id: grp_diag
+        sorting_weight: 20
+      unit_of_measurement: "min"
+      accuracy_decimals: 0
+      entity_category: "diagnostic"
+      filters:
+        - lambda: return x / 60;
+        - or:
+            - throttle: 60s
+            - delta: 0.45
+    brew_time:
+      name: Brew time
+      icon: "mdi:timer-outline"
+      web_server:
+        sorting_group_id: grp_betrieb
+        sorting_weight: 60
+      id: brew_time
+# Uncomment if using Acaia
+#  - platform: acaia
+#    weight:
+#      id: scale_sens
+#      name: Scale weight
+#      accuracy_decimals: 1
+#      unit_of_measurement: g
+#      filters:
+#        - lambda: return x * 1000;
+#    flow:
+#      name: Scale flow
+#      id: flow_sens
+# Uncomment if using Pressensor
+#  - platform: pressensor
+#    pressure:
+#      id: pressure_sens
+#      name: Group Pressure
+#      accuracy_decimals: 1
+#      unit_of_measurement: bar
+#      filters:
+#        - lambda: return x / 100000;
+#    battery_level:
+#      name: Pressensor Battery Level
+  - platform: wifi_signal # Reports the WiFi signal strength/RSSI in dB
+    name: "WiFi Signal dB"
+    web_server:
+      sorting_group_id: grp_diag
+      sorting_weight: 30
+    id: wifi_signal_db
+    update_interval: 60s
+    entity_category: "diagnostic"
+  # [MOD] Bezugszaehler. update_interval 60s als Absicherung, zusaetzlich
+  # wird nach jedem Bezug per component.update sofort veroeffentlicht.
+  - platform: template
+    name: "Shots Total"
+    web_server:
+      sorting_group_id: grp_zaehler
+      sorting_weight: 10
+    id: shots_total_sens
+    accuracy_decimals: 0
+    icon: "mdi:coffee"
+    state_class: "total_increasing"
+    update_interval: 60s
+    lambda: 'return (float) id(shots_total);'
+  - platform: template
+    name: "Shots Since Reset"
+    web_server:
+      sorting_group_id: grp_zaehler
+      sorting_weight: 20
+    id: shots_reset_sens
+    accuracy_decimals: 0
+    icon: "mdi:coffee-outline"
+    update_interval: 60s
+    lambda: 'return (float) id(shots_reset);'
+  - platform: uptime
+    id: esp32_up
+    name: "ESP32 Uptime"
+    web_server:
+      sorting_group_id: grp_diag
+      sorting_weight: 10
+    unit_of_measurement: "min"
+    accuracy_decimals: 0
+    filters:
+      - lambda: return x / 60;
+      - or:
+          - throttle: 60s
+          - delta: 0.45
+    entity_category: "diagnostic"
+
+# Enable Home Assistant API
+api:
+  reboot_timeout: 0s
+  encryption:
+    key: !secret api_key
+
+captive_portal:
+
+web_server:
+  port: 80
+  ota: false # Not available in IDF
+  log: true          # [MOD] Log-Spalte rechts, per Doppelklick ein-/ausblendbar
+  include_internal: true
+  # [MOD] Version 3 statt der Vorgabe 2: Karten-Layout mit Gruppen statt
+  # einer alphabetisch sortierten Tabelle. sorting_groups gibt es nur in v3.
+  version: 3
+  # [MOD] Gruppennamen englisch - wie alle Entitaetsnamen. Die IDs bleiben
+  # deutsch, die sind rein intern und tauchen nirgends in der Oberflaeche auf.
+  sorting_groups:
+    - id: grp_betrieb
+      name: "Operation"
+      sorting_weight: 10
+    - id: grp_preinf
+      name: "Pre-Infusion"
+      sorting_weight: 20
+    - id: grp_zaehler
+      name: "Shot Counter"
+      sorting_weight: 30
+    - id: grp_config
+      name: "Settings"
+      sorting_weight: 40
+    - id: grp_diag
+      name: "Diagnostics"
+      sorting_weight: 50
+
+spi:
+  clk_pin: GPIO12
+  mosi_pin: GPIO11
+  interface: hardware
+
+i2c:
+  sda: 2
+  scl: 1
+  scan: true
+  id: qwiic_3
+
+color:
+  - id: my_red
+    red: 100%
+    green: 0%
+    blue: 0%
+  - id: my_yellow
+    red: 100%
+    green: 100%
+    blue: 0%
+  - id: my_green
+    red: 0%
+    green: 100%
+    blue: 0%
+  - id: my_blue
+    red: 0%
+    green: 0%
+    blue: 100%
+  - id: dark_gray
+    red: 20%
+    green: 20%
+    blue: 20%
+  - id: my_gray
+    red: 50%
+    green: 50%
+    blue: 50%
+  - id: white
+    red: 100%
+    green: 100%
+    blue: 100%
+  - id: black
+    red: 0%
+    green: 0%
+    blue: 0%
+font:
+  - file:
+      type: gfonts
+      family: Roboto
+      weight: 900
+    id: font12
+    size: 24
+  - file:
+      type: gfonts
+      family: Roboto
+      weight: 900
+    id: font36
+    size: 48
+  - file: "open-lcc/9x15.bdf"
+    id: font2
+  - file: "open-lcc/5x7.bdf"
+    id: font1
+  # [MOD] Grosse Ziffern fuers OLED. Roboto rendert Ziffern ca. 0,7 x Schriftgroesse hoch.
+  #       glyphs begrenzt den Zeichensatz und spart Flash.
+  - file:
+      type: gfonts
+      family: Roboto
+      weight: 900
+    id: font_num
+    size: 30
+    glyphs: "0123456789.-°"
+  - file:
+      type: gfonts
+      family: Roboto
+      # [MOD] Gewicht 400 statt 900: Roboto Black wirkte auf dem kleinen
+      # Display zu massig. Groesse 34 reicht fuers gemessene Fenster.
+      weight: 400
+    id: font_timer
+    size: 34
+    glyphs: "0123456789.OK"
+  # [MOD] Mittelgrosse Versalien fuer die Wasserwarnung. Groesse 14 ist
+  # bewusst konservativ: "WASSER" braucht damit rund 59 px, das Feld rechts
+  # neben dem 16x16-Symbol hat 69. glyphs enthaelt nur die sechs Buchstaben,
+  # die in "WATER" und "WASSER" vorkommen.
+  - file:
+      type: gfonts
+      family: Roboto
+      weight: 900
+    id: font_warn
+    size: 14
+    glyphs: "AERSTW"
+
+
+# ESPHome >= 2025 verlangt 'type:' pro Bild; BINARY = 1-bit, passend fuer Mono-OLED
+image:
+  - file: "open-lcc/xbm/pump_on_2x.h"
+    id: pump_on
+    type: BINARY
+  # [MOD] 8x8-Varianten fuers OLED - die 2x-Bilder (16x16) waren fuers TFT
+  #       und ueberlappen sich im kleinen Sichtfenster
+  - file: "open-lcc/xbm/pump_on.h"
+    id: pump_1x
+    type: BINARY
+  # [MOD] Kaffeetasse, 32x32. cup_steam_a/b sind die zwei Dampf-Frames,
+  # zwischen denen beim Bezug gewechselt wird.
+  - file: "open-lcc/xbm/cup_no_smoke.h"
+    id: cup_still
+    type: BINARY
+  - file: "open-lcc/xbm/cup_smoke_1.h"
+    id: cup_steam_a
+    type: BINARY
+  - file: "open-lcc/xbm/cup_smoke_2.h"
+    id: cup_steam_b
+    type: BINARY
+  # [MOD] Kesselsymbole 7x7 statt der Buchstaben B und S
+  - file: "open-lcc/xbm/bssr_on.h"
+    id: bssr_1x
+    type: BINARY
+  - file: "open-lcc/xbm/sssr_on.h"
+    id: sssr_1x
+    type: BINARY
+  - file: "open-lcc/xbm/no_water.h"
+    id: no_water_1x
+    type: BINARY
+  - file: "open-lcc/xbm/no_water_2x.h"
+    id: no_water
+    type: BINARY
+  - file: "open-lcc/xbm/eco_mode_2x.h"
+    id: eco_mode
+    type: BINARY
+  - file: "open-lcc/xbm/bssr_on_2x.h"
+    id: bssr_on
+    type: BINARY
+  - file: "open-lcc/xbm/sssr_on_2x.h"
+    id: sssr_on
+    type: BINARY
+
+# Uncomment if using Acaia or Pressensor
+
+#graph:
+#  # Show multi-trace graph
+#  - id: brew_graph
+#    duration: 1 min
+#    x_grid: 10 s
+#    y_grid: 2     # degC/div
+#    width: 250
+#    height: 100
+#    max_value: 10
+#    min_value: 0
+#    traces:
+#      - sensor: flow_sens
+#        line_type: SOLID
+#        line_thickness: 3
+#        color: my_red
+#      - sensor: pressure_sens
+#        line_type: SOLID
+#        line_thickness: 3
+#        color: my_green
+
+# ST7789V
+
+#display:
+#  - platform: st7789v_fast
+#    model: Custom
+#    width: 172
+#    height: 320
+#    offset_height: 34
+#    offset_width: 0
+#    cs_pin: GPIO10
+#    dc_pin: GPIO9
+#    reset_pin: GPIO8
+#    backlight_pin: GPIO47
+#    rotation: 90°
+#    update_interval: 500ms
+#    pages:
+#      - id: page_idle
+#        lambda: |-
+#          Color textColor = id(white);
+#          if (id(sleep_mode_sw).state) {
+#            textColor = id(my_gray);
+#          }
+          
+#          if (id(eco_mode_sw).state) {
+#            it.printf(115, 36, id(font36), textColor, TextAlign::TOP_LEFT, "%.1f", id(coffee_boiler_sens).state);
+#            it.line(110, 90, 110 + 110, 90, textColor);
+#            it.printf(120, 120, id(font12), textColor, TextAlign::BOTTOM_LEFT, "%.1f °C", id(coffee_set_point).state);
+#          } else {
+#            it.printf(55, 36, id(font36), textColor, TextAlign::TOP_LEFT, "%.1f", id(coffee_boiler_sens).state);
+#            it.line(50, 90, 155, 90, textColor);
+#            it.printf(60, 120, id(font12), textColor, TextAlign::BOTTOM_LEFT, "%.1f °C", id(coffee_set_point).state);
+      
+#            it.printf(255, 36, id(font36), textColor, TextAlign::TOP_RIGHT, "%.0f", id(service_boiler_sens).state);
+#            it.line(175, 90, 260, 90, textColor);
+#            it.printf(250, 120, id(font12), textColor, TextAlign::BOTTOM_RIGHT, "%.0f °C", id(service_set_point).state);
+#          }
+
+#          // Uncomment if using Acaia
+          
+#          // if (id(acaia_connected).state) {
+#          //   it.printf(55, 150, id(font12), id(my_gray), TextAlign::BOTTOM_LEFT, "%.1f g", id(scale_sens).state);
+#          // }
+
+#          // Uncomment if using Pressensor
+          
+#          // if (id(pressensor_connected).state) {
+#          //   it.printf(250, 150, id(font12), id(my_gray), TextAlign::BOTTOM_RIGHT, "%.1f bar", id(pressure_sens).state);
+#          // }
+    
+#          it.image(285, 45, id(eco_mode), ImageAlign::TOP_RIGHT, id(black), id(eco_mode_sw).state ? id(white) : id(dark_gray));
+#          it.image(288, 65, id(pump_on), ImageAlign::TOP_RIGHT, id(black), id(filling_service_boiler_sens).state ? id(white) : id(dark_gray));
+#          it.image(285, 85, id(no_water), ImageAlign::TOP_RIGHT, id(black), id(water_low_sens).state ? id(white) : id(dark_gray));
+    
+#          if (id(brew_boiler_on).state) {
+#            it.image(285, 130, id(bssr_on), ImageAlign::TOP_RIGHT, id(white), id(black));
+#          } else if (id(service_boiler_on).state) {
+#            it.image(285, 130, id(sssr_on), ImageAlign::TOP_RIGHT, id(white), id(black));
+#          }
+    
+#          Color signal;
+#          if (id(wifi_signal_db).state >= -60) {
+#            signal = id(my_green);
+#          } else if (id(wifi_signal_db).state >= -67) {
+#            signal = id(my_yellow);
+#          } else {
+#            signal = id(my_red);
+#          }
+    
+#          it.printf(285, 24, id(font2), signal, TextAlign::TOP_RIGHT, "%.0f", id(wifi_signal_db).state);
+#      - id: page_brewing_sensors
+#        lambda: |-
+#          // Comment the next line, and uncomment the other two if using Acaia and Pressensor
+#          it.printf(40, 125, id(font12), "%.0f s", id(brew_time).state);
+#          // it.graph(36, 20, id(brew_graph));
+#          // it.printf(40, 125, id(font12), "%.0f s, %.1f bar, %.1f g/s", id(brew_time).state, id(pressure_sens).state, id(flow_sens).state);
+
+# SSD1306
+
+# (color: white/black already defined in the main color: block above, no need to redefine)
+
+# [MOD] Komplett neues OLED-Layout.
+# Sichtbares Fenster im Bianca-Gehaeuse: etwa x 16..105, y 16..53.
+# Alles ausserhalb davon wird vom Gehaeuse verdeckt - deshalb der Offset von 16/16.
+display:
+  - platform: ssd1306_spi
+    id: my_oled          # [MOD] noetig, um das Panel im Schlafmodus abzuschalten
+    update_interval: 0.5s
+    model: "SSD1306 128x64"
+    cs_pin: GPIO10
+    dc_pin: GPIO9
+    reset_pin: GPIO8
+    rotation: 180°
+    lambda: |-
+      // Sichtfenster am 05.09.2026 mit dem Kalibrierbild ausgemessen:
+      //   x 15..110, y 14..63  (96 x 50 Pixel)
+      // Innenrand 2 px ringsum  ->  Inhaltsbereich x 17..108, y 16..61.
+      // Alle Koordinaten unten beziehen sich darauf.
+
+      if (id(calib_sw).state) {
+        int n = (int) id(calib_inset).state;
+        it.rectangle(n, n, 128 - 2 * n, 64 - 2 * n);
+        it.printf(64, 40, id(font_num), TextAlign::BASELINE_CENTER, "%d", n);
+        return;
+      }
+
+      // [MOD] Der Bruehschalter meldet auch dann "brewing", wenn die Firmware
+      // die Pumpe wegen leerem Tank gar nicht anlaufen laesst. Der Timer haengt
+      // deshalb an shot_valid, nicht am rohen Schaltersignal - sonst zaehlt er
+      // bei einem Pruefvorgang mit leerem Tank munter hoch.
+      bool show_timer = (id(brewing).state && !id(water_low_sens).state) ||
+                        (id(shot_valid) && id(brew_end_ms) > 0 &&
+                         (millis() - id(brew_end_ms)) < 5000);
+      bool show_ok = !show_timer && id(warm_ok_ms) > 0 &&
+                     (millis() - id(warm_ok_ms)) < 2000;
+      bool warm = (id(status).state == "Warm");
+
+      // [MOD] Sprache der Displaytexte. Index 0 = English, 1 = Deutsch.
+      // active_index() liefert ein optional; faellt im Zweifel auf Englisch
+      // zurueck, damit nie ein leerer Text stehen bleibt.
+      auto li = id(lang_sel).active_index();
+      bool de = li.has_value() && li.value() == 1;
+
+      if (show_ok) {
+        // Aufheizen fertig: gleiche Bildsprache wie beim Bezug, Tasse ohne Dampf
+        it.print(17, 16, id(font1), de ? "BEREIT" : "READY");
+        it.printf(108, 16, id(font1), TextAlign::TOP_RIGHT, "%.1f°", id(coffee_boiler_sens).state);
+        it.image(17, 27, id(cup_still), id(white), id(black));
+        it.print(79, 55, id(font_timer), TextAlign::BASELINE_CENTER, "OK");
+
+      } else if (show_timer) {
+        // Bezug: Tasse wechselt zwischen den beiden Dampf-Frames
+        it.printf(17, 16, id(font1), "%.1f°", id(coffee_boiler_sens).state);
+        it.print(108, 16, id(font1), TextAlign::TOP_RIGHT, de ? "SEK" : "SEC");
+        // Tasse (32 px hoch) mittig im Bereich unter der Kopfzeile: 24..61
+        // ergibt Oberkante 27. Die Sekunden sitzen auf derselben Mittellinie
+        // und werden im Feld rechts der Tasse zentriert - so springt die
+        // Zahl nicht, wenn sie von einer auf zwei Stellen wechselt.
+        if (((millis() / 430) % 2) == 0) {
+          it.image(17, 27, id(cup_steam_a), id(white), id(black));
+        } else {
+          it.image(17, 27, id(cup_steam_b), id(white), id(black));
+        }
+        it.printf(79, 55, id(font_timer), TextAlign::BASELINE_CENTER, "%.0f", id(brew_time).state);
+
+      } else {
+        // Kopfzeile: Status links, Zustandssymbole rechts - nur wenn sie etwas
+        // bedeuten. rx wandert von rechts nach links, damit keine Luecken entstehen.
+        // Der Rohtext der Firmware ist zu lang: "Temperatures normalizing"
+        // waeren 24 Zeichen x 6 px = 144 px, das Fenster hat nur 96.
+        // Deshalb Kurzformen. Laengster Text ist "First run" mit 9 Zeichen
+        // = 54 px, endet bei x 71; das erste Symbol beginnt fruehestens
+        // bei x 80. Bis 16 Zeichen bliebe es kollisionsfrei zur rechten Kante.
+        // "Warm" ist der Rohtext der Firmware; angezeigt wird "Ready", weil
+        // das der tatsaechliche Zustand ist - die Maschine ist bezugsbereit.
+        const char *st = "?";
+        std::string lcc = id(status).state;
+        if      (lcc == "Warm")                     st = de ? "Bereit" : "Ready";
+        else if (lcc == "Heatup")                   st = de ? "Heizt"  : "Heating";
+        else if (lcc == "Temperatures normalizing") st = de ? "Regelt" : "Settling";
+        else if (lcc == "Sleeping")                 st = de ? "Schlaf" : "Sleep";
+        else if (lcc == "Bailed")                   st = "STOP";
+        else if (lcc == "First run")                st = de ? "Start"  : "First run";
+        it.print(17, 16, id(font1), st);
+        int rx = 108;
+        if (id(brew_boiler_on).state) {
+          it.image(rx - 6, 17, id(bssr_1x), id(white), id(black));
+          rx -= 10;
+        } else if (id(service_boiler_on).state) {
+          it.image(rx - 6, 17, id(sssr_1x), id(white), id(black));
+          rx -= 10;
+        }
+        if (id(filling_service_boiler_sens).state) {
+          it.image(rx - 7, 16, id(pump_1x), id(white), id(black));
+        }
+        // Das 8x8-Wassersymbol in der Kopfzeile entfaellt - bei leerem Tank
+        // steht die Warnung gross im Mittelfeld und muss nicht doppelt da sein.
+
+        if (id(water_low_sens).state) {
+          // Wassertank leer: die grosse Temperatur weicht der Warnung.
+          // 16x16-Symbol (no_water_2x) statt der 8x8-Variante, daneben das Wort.
+          // Die Breite des Wortes wird nicht geschaetzt, sondern gemessen -
+          // "WASSER" ist deutlich breiter als "WATER", und eine feste
+          // x-Position waere fuer eines von beiden immer falsch.
+          const char *wtxt = de ? "WASSER" : "WATER";
+          int tx, ty, tw, th;
+          it.get_text_bounds(0, 0, wtxt, id(font_warn), TextAlign::BASELINE_LEFT,
+                             &tx, &ty, &tw, &th);
+          const int gap = 6;
+          int bx = 17 + (92 - (16 + gap + tw)) / 2;   // Block waagerecht zentrieren
+          if (bx < 17) bx = 17;                       // Notbremse, falls doch zu breit
+          // Senkrecht: Symbol 31..46, Grundlinie 44 - beide Mitten liegen bei 39
+          it.image(bx, 31, id(no_water), id(white), id(black));
+          it.print(bx + 16 + gap, 44, id(font_warn), TextAlign::BASELINE_LEFT, wtxt);
+          // Fusszeile links: jetzt der Istwert - der Sollwert hilft nicht,
+          // solange ohnehin nicht gebrueht werden kann.
+          it.printf(17, 55, id(font1), "%.1f°", id(coffee_boiler_sens).state);
+
+        } else {
+          // Brühtemperatur gross. Grundlinie 50 zentriert die rund 21 px hohen
+          // Ziffern im Feld 23..54 zwischen Kopf- und Fusszeile.
+          it.printf(17, 50, id(font_num), TextAlign::BASELINE_LEFT, "%.1f°",
+                    id(coffee_boiler_sens).state);
+
+          // Fusszeile: links der Sollwert - direkt unter seinem Istwert, deshalb
+          // ohne Beschriftung. Blinkt im Sekundentakt, solange nicht "Warm".
+          if (warm || ((millis() / 1000) % 2) == 0) {
+            it.printf(17, 55, id(font1), "%.1f", id(coffee_set_point).state);
+          }
+        }
+        // Rechts der Dampfkessel, im Eco-Modus stattdessen der Hinweis
+        if (id(eco_mode_sw).state) {
+          it.print(108, 55, id(font1), TextAlign::TOP_RIGHT, "Eco");
+        } else {
+          it.printf(108, 55, id(font1), TextAlign::TOP_RIGHT, "S %.0f°",
+                    id(service_boiler_sens).state);
+        }
+      }
