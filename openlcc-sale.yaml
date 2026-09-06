@@ -1,14 +1,16 @@
-# openlcc-sale.yaml - Verkaufsversion ohne persoenliche Spezifika.
-# Separate Kopie von openlcc.yaml (Stand: 2026-09-05). Aenderungen an openlcc.yaml
-# muessen hier manuell nachgezogen werden.
-# Unterschied zu openlcc.yaml: kein wifi.use_address (persoenliche, feste IP
-# per DHCP-Reservierung an Lars gebunden - fuer Kaeuferboards ohne Bedeutung).
-# WLAN- und API-Encryption-Key kommen weiterhin aus secrets.yaml und muessen
-# fuer jedes verkaufte Board individuell (frischer api_key, z.B. via
-# openssl rand -base64 32) gesetzt werden, bevor geflasht wird.
+# openlcc-sale.yaml - build for the boards being sold, without personal specifics.
+# DERIVED FILE: generated 1:1 from openlcc.yaml (state: 2026-09-06); it differs
+# only in this header, in name_add_mac_suffix and in the missing
+# wifi.use_address. Do not edit directly - changes belong in openlcc.yaml and
+# are derived from there again.
+#
+# Per board, before flashing:
+#   - a fresh API encryption key (e.g. openssl rand -base64 32) in secrets.yaml
+#   - the buyer's WiFi credentials, or let the buyer enter them through the
+#     "Smart-LCC Setup" access point
 
 external_components:
-  # Lokale, gepatchte Kopie (Fix: #include "esp_random.h" fuer ESP-IDF >= 5.x,
+  # Local, patched copy (fix: #include "esp_random.h" for ESP-IDF >= 5.x,
   # Original: https://github.com/open-lcc/esphome-lcc-bianca-component)
   - source:
       type: local
@@ -33,9 +35,14 @@ external_components:
 esphome:
   project:
     name: open-lcc.bianca
-    version: 0.0.1
+    # [MOD] Own versioning starts here. 0.0.1 was the untouched upstream state.
+    # 1.0 is reached once the original LCC's functions are fully reproduced
+    # AND confirmed on the machine.
+    version: 0.8.0
   name: smart-lcc
-  name_add_mac_suffix: false
+  # [MOD] Unlike the personal build this appends the MAC suffix, so several
+  # boards can run on the same network without colliding on hostname and mDNS.
+  name_add_mac_suffix: true
   platformio_options:
     build_flags:
       - -O2
@@ -44,6 +51,11 @@ esphome:
       - -Werror=all
     board_build.flash_mode: dio
     board_build.partitions: "../../../open-lcc/custom_partitions.csv"
+  # [MOD] Compute the visible menu entries once at boot.
+  on_boot:
+    priority: -100
+    then:
+      - script.execute: menu_rebuild
 
 esp32:
   board: esp32-s3-devkitc-1
@@ -62,19 +74,18 @@ wifi:
   id: wifi_component
   ssid: !secret wifi_ssid
   password: !secret wifi_password
-  # use_address bewusst weggelassen: das war Lars persoenliche, per
-  # DHCP-Reservierung gebundene IP aus openlcc.yaml - fuer Kaeuferboards ohne
-  # Bedeutung. Ohne diese Zeile laeuft ESPHome ganz normal ueber DHCP + mDNS
-  # (*.local).
-  # [MOD] ESPHome fährt den ESP32 sonst in einen WLAN-Sparmodus, der bei
-  # schwachem Signal die Latenz hochzieht. Bei rund -90 dBm kontraproduktiv.
+  # use_address is deliberately left out: that was the personal, DHCP-reserved
+  # address from openlcc.yaml and means nothing on a buyer's board. Without the
+  # line ESPHome simply uses DHCP plus mDNS (*.local).
+  # [MOD] Otherwise ESPHome puts the ESP32 into a WiFi power-save mode that
+  # raises latency on a weak signal. Counterproductive at around -90 dBm.
   power_save_mode: NONE
-  # [MOD] Notzugang. captive_portal: stand schon in der Datei, ohne ap: aber
-  # ohne Funktion - ESPHome warnte beim Build entsprechend. Kommt das Board
-  # nicht ins konfigurierte WLAN, spannt es nach dem Timeout dieses eigene
-  # Netz auf; im Browser fuehrt dann jede Adresse auf die Einrichtungsseite.
-  # Fuer die Verkaufssaetze der eigentliche Zweck: der Kaeufer traegt sein
-  # WLAN selbst ein, ohne die Firmware neu bauen zu muessen.
+  # [MOD] Fallback access. captive_portal: was already in the file, but
+  # without ap: it had no effect - ESPHome warned about it at build time. If
+  # the board cannot join the configured WiFi it opens this network of its
+  # own after the timeout; in a browser every address then leads to the setup
+  # page. That is the real purpose for the boards being sold: the buyer
+  # enters their own WiFi without having to rebuild the firmware.
   ap:
     ssid: "Smart-LCC Setup"
     password: "openlcc123"
@@ -88,7 +99,7 @@ wifi:
 #  - mac_address: 66:77:88:99:AA:BB
 #    id: pressensor_id
 
-# ESPHome >= 2024.2 verlangt eine explizite Plattform fuer ota:
+# ESPHome >= 2024.2 requires an explicit platform for ota:
 ota:
   - platform: esphome
     on_begin:
@@ -186,8 +197,8 @@ switch:
       web_server:
         sorting_group_id: grp_betrieb
         sorting_weight: 120
-      # [MOD] OLED im Schlafmodus abschalten. Nicht nur Strom: ein statisches
-      # Layout brennt sich auf Dauer in ein OLED ein.
+      # [MOD] Turn the OLED off in sleep mode. Not just power: a static
+      # layout burns into an OLED over time.
       on_turn_on:
         then:
           - lambda: 'id(my_oled)->turn_off();'
@@ -201,11 +212,11 @@ switch:
       web_server:
         sorting_group_id: grp_betrieb
         sorting_weight: 130
-  # [MOD] Praeinfusion ein/aus - reiner Merker, steuert nichts direkt
-  # [MOD] Kalibrierbild: zeigt einen einzelnen Rahmen mit dem Abstand aus
-  # "Calibration Inset" und diesen Wert gross in der Mitte. Damit laesst sich
-  # ausmessen, welcher Teil des 128x64-Displays hinter der Gehaeuseblende
-  # ueberhaupt sichtbar ist - Wert hochdrehen, bis eine Kante auftaucht.
+  # [MOD] Pre-infusion on/off - a plain flag, it controls nothing directly
+  # [MOD] Calibration frame: draws a single rectangle inset by "Calibration
+  # Inset" and shows that value large in the middle. Use it to measure which
+  # part of the 128x64 display is actually visible behind the case bezel -
+  # raise the value until an edge appears.
   - platform: template
     name: "Calibration Frame"
     id: calib_sw
@@ -216,8 +227,8 @@ switch:
     web_server:
       sorting_group_id: grp_diag
       sorting_weight: 4
-  # [MOD] Dreht die Ausfuehrlichkeit zur Laufzeit hoch. Spart Datenverkehr
-  # ueber die schwache WLAN-Strecke, solange man nicht wirklich zuschaut.
+  # [MOD] Raises log verbosity at runtime. Saves traffic over the weak WiFi
+  # link as long as nobody is actually watching.
   - platform: template
     name: "Verbose Log"
     id: verbose_log
@@ -241,6 +252,93 @@ switch:
     optimistic: true
     restore_mode: RESTORE_DEFAULT_OFF
     icon: "mdi:water-outline"
+  # [MOD] Visibility of the pages in the button menu. Only these six switches
+  # decide what appears when paging on the machine - "Back" is always
+  # there. All can be on for the boards being sold; here, less is enough.
+  - platform: template
+    name: "Menu: Pre-Infusion"
+    id: menu_show_preinf
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    entity_category: "config"
+    icon: "mdi:water-outline"
+    web_server:
+      sorting_group_id: grp_menu
+      sorting_weight: 10
+    on_turn_on:
+      - script.execute: menu_rebuild
+    on_turn_off:
+      - script.execute: menu_rebuild
+  - platform: template
+    name: "Menu: Steam Set Point"
+    id: menu_show_steam
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    entity_category: "config"
+    icon: "mdi:kettle-steam-outline"
+    web_server:
+      sorting_group_id: grp_menu
+      sorting_weight: 20
+    on_turn_on:
+      - script.execute: menu_rebuild
+    on_turn_off:
+      - script.execute: menu_rebuild
+  - platform: template
+    name: "Menu: Eco Mode"
+    id: menu_show_eco
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    entity_category: "config"
+    icon: "mdi:leaf"
+    web_server:
+      sorting_group_id: grp_menu
+      sorting_weight: 30
+    on_turn_on:
+      - script.execute: menu_rebuild
+    on_turn_off:
+      - script.execute: menu_rebuild
+  - platform: template
+    name: "Menu: Language"
+    id: menu_show_lang
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    entity_category: "config"
+    icon: "mdi:translate"
+    web_server:
+      sorting_group_id: grp_menu
+      sorting_weight: 40
+    on_turn_on:
+      - script.execute: menu_rebuild
+    on_turn_off:
+      - script.execute: menu_rebuild
+  - platform: template
+    name: "Menu: Shot Counter"
+    id: menu_show_shots
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    entity_category: "config"
+    icon: "mdi:counter"
+    web_server:
+      sorting_group_id: grp_menu
+      sorting_weight: 50
+    on_turn_on:
+      - script.execute: menu_rebuild
+    on_turn_off:
+      - script.execute: menu_rebuild
+  - platform: template
+    name: "Menu: Sleep Mode"
+    id: menu_show_sleep
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    entity_category: "config"
+    icon: "mdi:sleep"
+    web_server:
+      sorting_group_id: grp_menu
+      sorting_weight: 60
+    on_turn_on:
+      - script.execute: menu_rebuild
+    on_turn_off:
+      - script.execute: menu_rebuild
 
 # Uncomment if using Pressensor
 #  - platform: ble_client
@@ -250,7 +348,7 @@ switch:
 open_lcc_bianca:
   id: lcc_1
 
-# [MOD] Welcher Weg die Praeinfusion faehrt
+# [MOD] Which path the pre-infusion takes
 select:
   - platform: template
     name: "Pre-Infusion Mode"
@@ -259,17 +357,22 @@ select:
       sorting_weight: 20
     id: preinf_mode
     icon: "mdi:water-sync"
+    # [MOD] The order is binding: index 0 = fixed times from the RP2040
+    # firmware (4 s / 10 s), index 1 = the two menu values.
+    # Shown as "Vorgabe"/"Eigene" on the OLED, English here like all entities.
     options:
-      - "Firmware routine"
-      - "ESP timer"
-    initial_option: "Firmware routine"
+      - "Preset"
+      - "Custom"
+    # [MOD] New devices start adjustable - otherwise the menu values would
+    # only take effect for the buyer after switching. Existing choice is kept.
+    initial_option: "Custom"
     optimistic: true
     restore_value: true
     entity_category: "config"
-  # [MOD] Sprache der Displaytexte. Wirkt ausschliesslich auf das OLED.
-  # Die Namen der Entitaeten sind in ESPHome fest einkompiliert und lassen
-  # sich zur Laufzeit nicht umschalten - die bleiben deshalb englisch und
-  # werden bei Bedarf in Home Assistant selbst umbenannt.
+  # [MOD] Language of the display texts. Affects the OLED only.
+  # Entity names are compiled into ESPHome and cannot be switched at
+  # runtime - they stay English and get renamed in Home Assistant
+  # if needed.
   - platform: template
     name: "Display Language"
     web_server:
@@ -285,25 +388,216 @@ select:
     restore_value: true
     entity_category: "config"
 
-# [MOD] Eigene Zeitsteuerung: Leitungsdruck fuer N Sekunden, dann Vollfluss.
-# mode: restart, damit ein zweiter Bezugsstart den alten Ablauf abloest.
+# [MOD] Rebuild of the original pre-infusion: build pressure first, then pump
+# off, then carry on until the lever closes. preinf_press_time is the first
+# phase, preinf_time the pause. On the tank "low_flow_sw on" is a real
+# standstill - the switch sends PUMP_OFF_SOLENOID_OPEN, and without a mains
+# water line no pressure stands at that open valve. mode: restart so a
+# second brew start replaces the sequence still running.
 script:
   - id: preinfusion
     mode: restart
     then:
+      - delay: !lambda 'return (uint32_t)(id(preinf_press_time).state * 1000);'
       - switch.turn_on: low_flow_sw
       - delay: !lambda 'return (uint32_t)(id(preinf_time).state * 1000);'
       - switch.turn_off: low_flow_sw
 
+  # [MOD] Visible menu entries as a bitmask. The switch -> entry mapping
+  # lives here and nowhere else; display and button logic only test bits.
+  # Bit 6 ("Back") is always set, otherwise the timeout would be the only
+  # way out. If the entry in view gets hidden, the display jumps to
+  # "Back".
+  - id: menu_rebuild
+    then:
+      - lambda: |-
+          uint16_t m = 0;
+          if (id(menu_show_preinf).state) m |= (1 << 0);
+          if (id(menu_show_steam).state)  m |= (1 << 1);
+          if (id(menu_show_eco).state)    m |= (1 << 2);
+          if (id(menu_show_lang).state)   m |= (1 << 3);
+          if (id(menu_show_shots).state)  m |= (1 << 4);
+          if (id(menu_show_sleep).state)  m |= (1 << 5);
+          m |= (1 << 6);
+          id(menu_mask) = m;
+          if (id(ui_level) == 0 && !((m >> id(ui_page)) & 1)) id(ui_page) = 6;
+
+  # [MOD] Short press inside the menu: page (state 1) or change a value
+  # (state 2). Normal operation deliberately does not pass through here but
+  # goes straight to number.increment/decrement - that way the step size
+  # stays the entity's own instead of one hardcoded here.
+  - id: ui_short
+    parameters:
+      dir: int
+    then:
+      - lambda: |-
+          id(ui_last_ms) = millis();
+          if (id(ui_state) == 1) {
+            if (id(ui_level) != 0) {          // submenus: fixed page count
+              uint8_t n = (id(ui_level) == 1) ? 5 : 3;
+              id(ui_page) = (uint8_t) ((id(ui_page) + dir + n) % n);
+              return;
+            }
+            int p = id(ui_page);              // top level: skip hidden entries
+            for (int i = 0; i < 7; i++) {
+              p = (p + dir + 7) % 7;
+              if ((id(menu_mask) >> p) & 1) break;
+            }
+            id(ui_page) = (uint8_t) p;
+            return;
+          }
+          if (id(ui_state) != 2) return;
+          // Whole seconds like the original, even though the entity allows 0.5.
+          if (id(ui_level) == 1 && id(ui_page) == 2) {
+            float v = roundf(id(preinf_press_time).state) + dir;
+            if (v < 0) v = 0;
+            if (v > 15) v = 15;
+            auto c = id(preinf_press_time).make_call();
+            c.set_value(v);
+            c.perform();
+          } else if (id(ui_level) == 1 && id(ui_page) == 3) {
+            float v = roundf(id(preinf_time).state) + dir;
+            if (v < 0) v = 0;
+            if (v > 15) v = 15;
+            auto c = id(preinf_time).make_call();
+            c.set_value(v);
+            c.perform();
+          } else if (id(ui_level) == 0 && id(ui_page) == 1) {
+            // Without a reported reading do nothing, rather than moving the steam
+            // boiler from a guessed starting point.
+            float cur = id(service_set_point).state;
+            if (std::isnan(cur)) return;
+            auto c = id(service_set_point).make_call();
+            c.set_value(roundf(cur) + dir);
+            c.perform();
+          } else if (id(ui_level) == 2 && id(ui_page) == 1) {
+            // Auto-sleep goes up to 600 minutes - single steps would be
+            // unusable, so five per press. 0 means "off".
+            // Without a reported reading start at 0 instead of computing with NaN -
+            // set_value(NaN) would be discarded without a word.
+            float cur = id(asa).state;
+            if (std::isnan(cur)) cur = 0;
+            float v = roundf(cur) + 5 * dir;
+            if (v < 0) v = 0;
+            if (v > 600) v = 600;
+            auto c = id(asa).make_call();
+            c.set_value(v);
+            c.perform();
+          }
+
+  # [MOD] Long press: open the menu, trigger an entry, confirm a value or
+  # close - depending on state and page.
+  - id: ui_long
+    then:
+      - lambda: |-
+          id(ui_last_ms) = millis();
+          if (id(ui_state) == 0) {
+            int p = 0;
+            for (int i = 0; i < 7; i++) {
+              if ((id(menu_mask) >> p) & 1) break;
+              p = (p + 1) % 7;
+            }
+            id(ui_page) = (uint8_t) p;
+            id(ui_level) = 0;
+            id(ui_state) = 1;
+            return;
+          }
+          if (id(ui_state) == 2) { id(ui_state) = 1; return; }
+          if (id(ui_level) == 1) {          // pre-infusion submenu
+            switch (id(ui_page)) {
+              case 0: id(preinf_on).toggle(); break;
+              case 1: {                     // Modus umschalten
+                auto c = id(preinf_mode).make_call();
+                c.select_next(true);
+                c.perform();
+                break;
+              }
+              case 2:
+              case 3: id(ui_state) = 2; break;
+              default:                      // "Back": one level up
+                id(ui_level) = 0;
+                id(ui_page) = 0;
+                break;
+            }
+            return;
+          }
+          if (id(ui_level) == 2) {          // Untermenue Schlafmodus
+            switch (id(ui_page)) {
+              case 0: id(sleep_mode_sw).toggle(); break;
+              case 1: id(ui_state) = 2; break;
+              default:
+                id(ui_level) = 0;
+                id(ui_page) = 5;
+                break;
+            }
+            return;
+          }
+          switch (id(ui_page)) {
+            case 0:                         // Pre-infusion: one level deeper
+              id(ui_level) = 1;
+              id(ui_page) = 0;
+              break;
+            case 1: id(ui_state) = 2; break;
+            case 2: id(eco_mode_sw).toggle(); break;
+            case 3: {
+              auto c = id(lang_sel).make_call();
+              c.select_next(true);
+              c.perform();
+              break;
+            }
+            case 4: id(shots_reset) = 0; break;
+            case 5:                         // Sleep: one level deeper
+              id(ui_level) = 2;
+              id(ui_page) = 0;
+              break;
+            default: id(ui_state) = 0; break;
+          }
+
+# [MOD] Two ways out of the menu: eight seconds without a button press, and
+# a starting brew - then the display belongs to the shot timer.
+interval:
+  - interval: 500ms
+    then:
+      - lambda: |-
+          if (id(ui_state) == 0) return;
+          if (id(brewing).state || (millis() - id(ui_last_ms)) > 8000) {
+            id(ui_state) = 0;
+            id(ui_level) = 0;
+          }
+
 logger:
-  # [MOD] level ist der Compile-Filter (was ueberhaupt in der Firmware landet),
-  # initial_level der Startzustand nach dem Booten. Normalbetrieb also leise,
-  # ueber den Schalter "Ausfuehrliches Log" zur Laufzeit auf DEBUG hochdrehbar.
+  # [MOD] level is the compile-time filter (what ends up in the firmware at
+  # all), initial_level the state after boot. Quiet in normal operation,
+  # raise it to DEBUG at runtime with the "Verbose Log" switch.
   level: DEBUG
   initial_level: WARN
 
-# [MOD] Merker fuer den Timer-Nachlauf nach dem Bezug
+# [MOD] Flag for the timer run-on after a brew
 globals:
+  # [MOD] Button menu: 0 = normal operation, 1 = paging, 2 = editing a value.
+  - id: ui_state
+    type: uint8_t
+    restore_value: no
+    initial_value: '0'
+  # [MOD] Level: 0 = main menu, 1 = pre-infusion submenu, 2 = sleep submenu
+  - id: ui_level
+    type: uint8_t
+    restore_value: no
+    initial_value: '0'
+  - id: ui_page
+    type: uint8_t
+    restore_value: no
+    initial_value: '0'
+  - id: ui_last_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  # [MOD] Bitmask of the visible entries, set by menu_rebuild.
+  # Every bit set until boot has evaluated the switches.
+  - id: menu_mask
+    type: uint16_t
+    restore_value: no
+    initial_value: '511'
   - id: brew_end_ms
     type: uint32_t
     restore_value: no
@@ -312,8 +606,8 @@ globals:
     type: uint32_t
     restore_value: no
     initial_value: '0'
-  # [MOD] Bezugszaehler. restore_value liegt im Flash und ueberlebt Neustarts.
-  # Geschrieben wird nur einmal pro Bezug - fuer den Flash unkritisch.
+  # [MOD] Shot counters. restore_value lives in flash and survives reboots.
+  # Written once per brew - uncritical for the flash.
   - id: shots_total
     type: uint32_t
     restore_value: yes
@@ -322,7 +616,7 @@ globals:
     type: uint32_t
     restore_value: yes
     initial_value: '0'
-  # [MOD] Nachbau der Original-Anzeige: kurzes "OK" beim Erreichen von "Warm"
+  # [MOD] Rebuild of the original display: a brief "OK" on reaching "Warm"
   - id: was_warm
     type: bool
     restore_value: no
@@ -331,10 +625,10 @@ globals:
     type: uint32_t
     restore_value: no
     initial_value: '0'
-  # [MOD] Merker: war dieser Bezug ueberhaupt ein echter Bezug? Bei leerem
-  # Tank sperrt die Firmware die Pumpe, der Bruehschalter meldet aber
-  # weiterhin "brewing". Ohne diesen Merker liefe der Timer los und der
-  # Zaehler wuerde einen Bezug buchen, der nie stattgefunden hat.
+  # [MOD] Flag: was this brew a real brew at all? With an empty tank the
+  # firmware blocks the pump, but the brew switch keeps reporting "brewing".
+  # Without this flag the timer would start and the counter would book a
+  # brew that never happened.
   - id: shot_valid
     type: bool
     restore_value: no
@@ -346,8 +640,8 @@ text_sensor:
       id: status
       name: LCC Status
       icon: "mdi:state-machine"
-      # [MOD] Nur die Flanke nach "Warm" merken. Die 15-Sekunden-Sperre
-      # verhindert, dass die Meldung direkt nach jedem Neustart erscheint.
+      # [MOD] Only remember the edge into "Warm". The 15-second lockout
+      # keeps the message from appearing right after every reboot.
       on_value:
         - lambda: |-
             bool warm = (x == "Warm");
@@ -362,15 +656,9 @@ text_sensor:
 #    name: "BLE Devices Scanner"
 
 binary_sensor:
-  - platform: template
-    name: "Template Currently Brewing"
-    web_server:
-      sorting_group_id: grp_diag
-      sorting_weight: 150
-    internal: true
-    id: templ_brewing
-    # on_press/on_release entfernt: display-Seitenumschaltung existiert nur beim TFT,
-    # das OLED nutzt eine einzelne Lambda ohne pages
+  # [MOD] The internal mirror "Template Currently Brewing" is gone: it came
+  # from the TFT page switching, was never read anywhere and sat confusingly
+  # next to the real sensor in the web interface.
   - platform: open_lcc_bianca
     brewing:
       name: Currently Brewing
@@ -379,16 +667,12 @@ binary_sensor:
         sorting_group_id: grp_betrieb
         sorting_weight: 70
       id: brewing
-      # [MOD] internal entfernt - Grundlage fuer Automatisierungen in HA
-      on_state:
-        - binary_sensor.template.publish:
-            id: templ_brewing
-            state: !lambda 'return x;'
-      # [MOD] Bezugsbeginn merken und ggf. Praeinfusion starten
+      # [MOD] internal removed - basis for automations in Home Assistant
+      # [MOD] Remember the brew start and start pre-infusion if enabled
       on_press:
         - lambda: |-
             id(brew_start_ms) = millis();
-            // Bei leerem Tank laeuft die Pumpe nicht - dann ist das kein Bezug.
+            // With an empty tank the pump does not run - then it is not a brew.
             id(shot_valid) = !id(water_low_sens).state;
         - if:
             condition:
@@ -399,31 +683,31 @@ binary_sensor:
               - if:
                   condition:
                     lambda: |-
-                      // Option 0 = "Firmware-Routine". Select::state gibt es
-                      // ab ESPHome 2026.8 nicht mehr, active_index() ersetzt es.
+                      // Option 0 = "Preset" (fixed times in the RP2040 firmware).
+                      // Select::state is gone since ESPHome 2026.8, active_index() replaces it.
                       auto i = id(preinf_mode).active_index();
                       return i.has_value() && i.value() == 0;
                   then:
                     - open_lcc.bianca.enqueue_routine: lcc_1
                   else:
                     - script.execute: preinfusion
-      # [MOD] Bezugsende: Timer-Nachlauf, Praeinfusion sicher beenden, Zaehler
+      # [MOD] Brew end: timer run-on, stop pre-infusion safely, count the shot
       on_release:
         - lambda: 'id(brew_end_ms) = millis();'
         - if:
             condition:
               lambda: |-
-                // Option 1 = "ESP-Zeit"
+                // Option 1 = "Custom" (the two menu values)
                 auto i = id(preinf_mode).active_index();
                 return i.has_value() && i.value() == 1;
             then:
-              # Abbruch mitten in der Praeinfusion: immer auf Vollfluss zurueck
+              # Aborted mid pre-infusion: always fall back to full flow
               - script.stop: preinfusion
               - switch.turn_off: low_flow_sw
         - lambda: |-
             uint32_t dauer = (id(brew_end_ms) - id(brew_start_ms)) / 1000;
-            // shot_valid faellt weg, sobald waehrend des Bezugs der Tank
-            // leer meldet - dann wurde ab da nichts mehr gefoerdert.
+            // shot_valid drops as soon as the tank reports empty during the brew -
+            // from that point on nothing was being pumped any more.
             if (id(shot_valid) && dauer >= (uint32_t) id(shot_min_s).state) {
               id(shots_total) += 1;
               id(shots_reset) += 1;
@@ -444,11 +728,11 @@ binary_sensor:
         sorting_group_id: grp_betrieb
         sorting_weight: 100
       id: water_low_sens
-      # [MOD] internal entfernt - der Wasseralarm gehoert nach Home Assistant,
-      # damit man sich benachrichtigen lassen kann. device_class: problem
-      # laesst ihn dort als Stoerung statt als An/Aus erscheinen.
+      # [MOD] internal removed - the water alarm belongs in Home Assistant so
+      # you can get notified. device_class: problem makes it appear there as
+      # a fault rather than a plain on/off.
       device_class: problem
-      # [MOD] Geht der Tank mitten im Bezug leer, ist der Rest kein Bezug mehr
+      # [MOD] If the tank runs dry mid-brew, the rest is no longer a brew
       on_press:
         - lambda: 'id(shot_valid) = false;'
     brew_boiler_heating:
@@ -458,10 +742,10 @@ binary_sensor:
         sorting_group_id: grp_diag
         sorting_weight: 62
       id: brew_boiler_on
-      # [MOD] wieder internal: Die Firmware regelt ueber ein Tastverhaeltnis
-      # (25 Zeitscheiben), der Sensor kippt deshalb im Sekundentakt. In Home
-      # Assistant ist das Rauschen. Bleibt in der Weboberflaeche sichtbar und
-      # versorgt weiterhin die B/S-Anzeige auf dem Display.
+      # [MOD] internal again: the firmware controls via a duty cycle (25 time
+      # slices), so the sensor toggles every second. In Home Assistant that is
+      # noise. It stays visible in the web interface and still feeds the B/S
+      # indicator on the display.
       device_class: heat
       internal: true
     service_boiler_heating:
@@ -507,9 +791,30 @@ binary_sensor:
       mode:
         input: true
         pullup: true
-    on_press:
-      then:
-        - number.increment: coffee_set_point
+    # [MOD] Short and long press separated. Short is the temperature in normal
+    # operation as before, paging or the value inside the menu; long opens the
+    # menu and triggers its entry. The price: the temperature now changes on
+    # release, because only then is the press duration known.
+    on_click:
+      - min_length: 30ms
+        max_length: 500ms
+        then:
+          - if:
+              condition:
+                lambda: 'return id(ui_state) == 0;'
+              then:
+                - number.increment:
+                    id: coffee_set_point
+                    cycle: false
+                - lambda: 'id(ui_last_ms) = millis();'
+              else:
+                - script.execute:
+                    id: ui_short
+                    dir: 1
+      - min_length: 500ms
+        max_length: 20000ms
+        then:
+          - script.execute: ui_long
     internal: true
     name: "Plus button"
     web_server:
@@ -522,9 +827,26 @@ binary_sensor:
       mode:
         input: true
         pullup: true
-    on_press:
-      then:
-        - number.decrement: coffee_set_point
+    on_click:
+      - min_length: 30ms
+        max_length: 500ms
+        then:
+          - if:
+              condition:
+                lambda: 'return id(ui_state) == 0;'
+              then:
+                - number.decrement:
+                    id: coffee_set_point
+                    cycle: false
+                - lambda: 'id(ui_last_ms) = millis();'
+              else:
+                - script.execute:
+                    id: ui_short
+                    dir: -1
+      - min_length: 500ms
+        max_length: 20000ms
+        then:
+          - script.execute: ui_long
     internal: true
     name: "Minus button"
     web_server:
@@ -571,7 +893,7 @@ button:
       sorting_weight: 40
     on_press:
       - open_lcc.bianca.enqueue_routine: lcc_1
-  # [MOD] Nur der ruecksetzbare Zaehler, der Gesamtzaehler bleibt
+  # [MOD] Only the resettable counter, the total one stays untouched
   - platform: template
     name: "Reset Shot Counter"
     icon: "mdi:counter"
@@ -619,8 +941,8 @@ number:
         sorting_group_id: grp_betrieb
         sorting_weight: 50
       mode: box
-  # [MOD] Nur fuers Kalibrierbild: Abstand des einzelnen Rahmens vom Displayrand.
-  # Hochdrehen, bis eine Kante sichtbar wird - der Wert steht gross im Bild.
+  # [MOD] Calibration frame only: inset of the single rectangle from the edge.
+  # Raise it until an edge becomes visible - the value is shown large.
   - platform: template
     name: "Calibration Inset"
     icon: "mdi:arrow-expand-all"
@@ -636,7 +958,28 @@ number:
     web_server:
       sorting_group_id: grp_diag
       sorting_weight: 3
-  # [MOD] Dauer der Praeinfusion, nur im Modus "ESP-Zeit" wirksam
+  # [MOD] First phase of the pre-infusion: this is how long the pump runs and
+  # builds pressure before it cuts out for the pause. 0 = pause at once, i.e.
+  # the previous behaviour.
+  - platform: template
+    name: "Pre-Infusion Pressure Time"
+    icon: "mdi:timer-play-outline"
+    web_server:
+      sorting_group_id: grp_preinf
+      sorting_weight: 25
+    id: preinf_press_time
+    min_value: 0
+    max_value: 15
+    step: 0.5
+    unit_of_measurement: "s"
+    mode: box
+    optimistic: true
+    restore_value: true
+    initial_value: 3
+    entity_category: "config"
+  # [MOD] Second phase: this is how long the pump stays off. The entity name
+  # deliberately stays "Pre-Infusion Time" - a new name would change the
+  # entity_id and break references in Home Assistant. In the menu: "Pause".
   - platform: template
     name: "Pre-Infusion Time"
     icon: "mdi:timer-outline"
@@ -653,7 +996,7 @@ number:
     restore_value: true
     initial_value: 5
     entity_category: "config"
-  # [MOD] Ab dieser Bezugsdauer zaehlt ein Bezug - haelt Spuelgaenge draussen
+  # [MOD] A brew counts from this duration on - keeps flushes out
   - platform: template
     name: "Minimum Shot Duration"
     icon: "mdi:timer-cog-outline"
@@ -694,9 +1037,9 @@ sensor:
         sorting_group_id: grp_diag
         sorting_weight: 40
       id: outlet_temp_sens
-      # [MOD] internal: ohne MCP9600-Wandler stehen beide dauerhaft auf 0.
-      # Bleiben in der Weboberfläche unter Diagnose sichtbar, tauchen aber
-      # nicht mehr in Home Assistant auf.
+      # [MOD] internal: without an MCP9600 converter both sit at 0 permanently.
+      # They stay visible under Diagnostics in the web interface but no
+      # longer appear in Home Assistant.
       internal: true
     external_temperature_2:
       name: E61 Inlet Temperature
@@ -784,8 +1127,8 @@ sensor:
     id: wifi_signal_db
     update_interval: 60s
     entity_category: "diagnostic"
-  # [MOD] Bezugszaehler. update_interval 60s als Absicherung, zusaetzlich
-  # wird nach jedem Bezug per component.update sofort veroeffentlicht.
+  # [MOD] Shot counters. update_interval 60s as a safety net; on top of that it
+  # is published immediately after every brew via component.update.
   - platform: template
     name: "Shots Total"
     web_server:
@@ -833,13 +1176,13 @@ captive_portal:
 web_server:
   port: 80
   ota: false # Not available in IDF
-  log: true          # [MOD] Log-Spalte rechts, per Doppelklick ein-/ausblendbar
+  log: true          # [MOD] Log column on the right, toggled by double-click
   include_internal: true
-  # [MOD] Version 3 statt der Vorgabe 2: Karten-Layout mit Gruppen statt
-  # einer alphabetisch sortierten Tabelle. sorting_groups gibt es nur in v3.
+  # [MOD] Version 3 instead of the default 2: card layout with groups instead
+  # of an alphabetically sorted table. sorting_groups only exists in v3.
   version: 3
-  # [MOD] Gruppennamen englisch - wie alle Entitaetsnamen. Die IDs bleiben
-  # deutsch, die sind rein intern und tauchen nirgends in der Oberflaeche auf.
+  # [MOD] Group names in English - like all entity names. The IDs stay German,
+  # they are internal only and never show up in the interface.
   sorting_groups:
     - id: grp_betrieb
       name: "Operation"
@@ -850,6 +1193,9 @@ web_server:
     - id: grp_zaehler
       name: "Shot Counter"
       sorting_weight: 30
+    - id: grp_menu
+      name: "Display Menu"
+      sorting_weight: 35
     - id: grp_config
       name: "Settings"
       sorting_weight: 40
@@ -918,8 +1264,8 @@ font:
     id: font2
   - file: "open-lcc/5x7.bdf"
     id: font1
-  # [MOD] Grosse Ziffern fuers OLED. Roboto rendert Ziffern ca. 0,7 x Schriftgroesse hoch.
-  #       glyphs begrenzt den Zeichensatz und spart Flash.
+  # [MOD] Large digits for the OLED. Roboto renders digits at about 0.7 x size.
+  #       glyphs limits the character set and saves flash.
   - file:
       type: gfonts
       family: Roboto
@@ -930,16 +1276,16 @@ font:
   - file:
       type: gfonts
       family: Roboto
-      # [MOD] Gewicht 400 statt 900: Roboto Black wirkte auf dem kleinen
-      # Display zu massig. Groesse 34 reicht fuers gemessene Fenster.
+      # [MOD] Weight 400 instead of 900: Roboto Black looked too heavy on the
+      # small display. Size 34 is enough for the measured window.
       weight: 400
     id: font_timer
     size: 34
     glyphs: "0123456789.OK"
-  # [MOD] Mittelgrosse Versalien fuer die Wasserwarnung. Groesse 14 ist
-  # bewusst konservativ: "WASSER" braucht damit rund 59 px, das Feld rechts
-  # neben dem 16x16-Symbol hat 69. glyphs enthaelt nur die sechs Buchstaben,
-  # die in "WATER" und "WASSER" vorkommen.
+  # [MOD] Medium-size capitals for the water warning. Size 14 is deliberately
+  # conservative: "WASSER" needs about 59 px, the field next to the 16x16
+  # symbol has 69. glyphs holds only the six letters occurring in "WATER"
+  # and "WASSER".
   - file:
       type: gfonts
       family: Roboto
@@ -949,18 +1295,18 @@ font:
     glyphs: "AERSTW"
 
 
-# ESPHome >= 2025 verlangt 'type:' pro Bild; BINARY = 1-bit, passend fuer Mono-OLED
+# ESPHome >= 2025 requires 'type:' per image; BINARY = 1-bit, right for a mono OLED
 image:
   - file: "open-lcc/xbm/pump_on_2x.h"
     id: pump_on
     type: BINARY
-  # [MOD] 8x8-Varianten fuers OLED - die 2x-Bilder (16x16) waren fuers TFT
-  #       und ueberlappen sich im kleinen Sichtfenster
+  # [MOD] 8x8 variants for the OLED - the 2x images (16x16) were meant for
+  #       the TFT and overlap inside the small visible window
   - file: "open-lcc/xbm/pump_on.h"
     id: pump_1x
     type: BINARY
-  # [MOD] Kaffeetasse, 32x32. cup_steam_a/b sind die zwei Dampf-Frames,
-  # zwischen denen beim Bezug gewechselt wird.
+  # [MOD] Coffee cup, 32x32. cup_steam_a/b are the two steam frames the
+  # display alternates between while brewing.
   - file: "open-lcc/xbm/cup_no_smoke.h"
     id: cup_still
     type: BINARY
@@ -970,7 +1316,7 @@ image:
   - file: "open-lcc/xbm/cup_smoke_2.h"
     id: cup_steam_b
     type: BINARY
-  # [MOD] Kesselsymbole 7x7 statt der Buchstaben B und S
+  # [MOD] 7x7 boiler symbols instead of the letters B and S
   - file: "open-lcc/xbm/bssr_on.h"
     id: bssr_1x
     type: BINARY
@@ -1095,12 +1441,12 @@ image:
 
 # (color: white/black already defined in the main color: block above, no need to redefine)
 
-# [MOD] Komplett neues OLED-Layout.
-# Sichtbares Fenster im Bianca-Gehaeuse: etwa x 16..105, y 16..53.
-# Alles ausserhalb davon wird vom Gehaeuse verdeckt - deshalb der Offset von 16/16.
+# [MOD] Completely new OLED layout.
+# Visible window inside the Bianca case: roughly x 16..105, y 16..53.
+# Everything outside it is hidden by the case - hence the 16/16 offset.
 display:
   - platform: ssd1306_spi
-    id: my_oled          # [MOD] noetig, um das Panel im Schlafmodus abzuschalten
+    id: my_oled          # [MOD] needed to switch the panel off in sleep mode
     update_interval: 0.5s
     model: "SSD1306 128x64"
     cs_pin: GPIO10
@@ -1108,10 +1454,10 @@ display:
     reset_pin: GPIO8
     rotation: 180°
     lambda: |-
-      // Sichtfenster am 05.09.2026 mit dem Kalibrierbild ausgemessen:
+      // Visible window measured with the calibration frame on 2026-09-05:
       //   x 15..110, y 14..63  (96 x 50 Pixel)
       // Innenrand 2 px ringsum  ->  Inhaltsbereich x 17..108, y 16..61.
-      // Alle Koordinaten unten beziehen sich darauf.
+      // All coordinates below refer to that.
 
       if (id(calib_sw).state) {
         int n = (int) id(calib_inset).state;
@@ -1120,10 +1466,191 @@ display:
         return;
       }
 
-      // [MOD] Der Bruehschalter meldet auch dann "brewing", wenn die Firmware
-      // die Pumpe wegen leerem Tank gar nicht anlaufen laesst. Der Timer haengt
-      // deshalb an shot_valid, nicht am rohen Schaltersignal - sonst zaehlt er
-      // bei einem Pruefvorgang mit leerem Tank munter hoch.
+      // [MOD] Button menu. While it is open, only the menu is drawn.
+      // One page per value - a list would not be legible in the 96x50 window.
+      // Header at y 16, label at y 27, value on baseline 54.
+      if (id(ui_state) != 0) {
+        auto mli = id(lang_sel).active_index();
+        bool mde = mli.has_value() && mli.value() == 1;
+        const uint8_t p = id(ui_page);
+        const uint8_t lv = id(ui_level);
+        const bool sub = (lv != 0);
+        const bool edit = (id(ui_state) == 2);
+
+        // Position on the right. At top level hidden entries do not count,
+        // otherwise it would read 3/7 with five reachable; below it is four.
+        int idx = 0, tot = 0;
+        if (sub) {
+          tot = (lv == 1) ? 4 : 3;
+          idx = p + 1;
+        } else {
+          for (int i = 0; i < 7; i++) {
+            if ((id(menu_mask) >> i) & 1) {
+              tot++;
+              if (i == p) idx = tot;
+            }
+          }
+        }
+        const char *head;
+        if (edit)         head = mde ? "WERT" : "EDIT";
+        else if (lv == 1) head = mde ? "PRAEINF" : "PRE-INF";
+        else if (lv == 2) head = mde ? "SCHLAF" : "SLEEP";
+        else              head = "MENU";
+        it.print(17, 16, id(font1), head);
+        it.printf(108, 16, id(font1), TextAlign::TOP_RIGHT, "%d/%d", idx, tot);
+
+        const char *lbl;
+        if (lv == 1) {
+          switch (p) {
+            case 0:  lbl = mde ? "AKTIV"     : "ACTIVE";    break;
+            case 1:  lbl = mde ? "MODUS"     : "MODE";      break;
+            case 2:  lbl = mde ? "DRUCK"     : "PRESSURE";  break;
+            case 3:  lbl = "PAUSE";                         break;
+            default: lbl = mde ? "ZURUECK"   : "BACK";      break;
+          }
+        } else if (lv == 2) {
+          switch (p) {
+            case 0:  lbl = mde ? "AKTIV"     : "ACTIVE";     break;
+            case 1:  lbl = mde ? "AUTO NACH" : "AUTO AFTER"; break;
+            default: lbl = mde ? "ZURUECK"   : "BACK";      break;
+          }
+        } else {
+          switch (p) {
+            case 0:  lbl = mde ? "PRAEINFUSION" : "PRE-INFUSION"; break;
+            case 1:  lbl = mde ? "DAMPF"        : "STEAM";        break;
+            case 2:  lbl = mde ? "ECO-MODUS"    : "ECO MODE";     break;
+            case 3:  lbl = mde ? "SPRACHE"      : "LANGUAGE";     break;
+            case 4:  lbl = mde ? "BEZUEGE"      : "SHOTS";        break;
+            case 5:  lbl = mde ? "SCHLAF"       : "SLEEP";        break;
+            default: lbl = mde ? "ZURUECK"      : "EXIT";         break;
+          }
+        }
+        it.print(17, 27, id(font1), lbl);
+
+        // The right of the label line says what a long press does here -
+        // otherwise you have to find out by trying. ">" leads one level
+        // deeper, the double arrow changes this page's value (toggle it, or
+        // open editing). In edit mode it disappears, because there
+        // the two button marks next to the value already say everything.
+        // Deliberately unmarked: "Back" and the shot counter - a long press
+        // there resets the counter, and that should not be discovered by
+        // accident.
+        if (lv == 0 && (p == 0 || p == 5)) {
+          it.print(108, 27, id(font1), TextAlign::TOP_RIGHT, ">");
+        } else if (!edit && ((lv == 0 && p >= 1 && p <= 3) ||
+                             (lv == 1 && p <= 3) ||
+                             (lv == 2 && p <= 1))) {
+          it.line(99, 30, 108, 30);
+          it.line(99, 30, 102, 27);
+          it.line(99, 30, 102, 33);
+          it.line(108, 30, 105, 27);
+          it.line(108, 30, 105, 33);
+        }
+
+        // In edit mode the two marks name the buttons. Deliberately no
+        // inverted area - the value should look the same as everywhere else.
+        // Position and width of the drawn value. The button marks attach
+        // to it further down - so they sit next to the number, not at the edge.
+        int blkX = 17, blkW = 92;
+
+        // Number pages: value large, unit small beside it, centred as one
+        // block. font_num has no letters, so the "s" comes from font1.
+        float num = -1.0f;
+        const char *unit = "";
+        if (lv == 1 && p == 2)      { num = id(preinf_press_time).state; unit = "s"; }
+        else if (lv == 1 && p == 3) { num = id(preinf_time).state;       unit = "s"; }
+        else if (lv == 0 && p == 1) { num = id(service_set_point).state; unit = "°"; }
+        else if (lv == 0 && p == 4) { num = (float) id(shots_reset);     unit = "";  }
+        // Auto-sleep: 0 means switched off and is shown as a word.
+        else if (lv == 2 && p == 1 && !std::isnan(id(asa).state) &&
+                 id(asa).state > 0) { num = id(asa).state;              unit = "m"; }
+        // The "Sleep" entry above summarises what is set behind it - the
+        // auto-sleep time. Whether the machine is asleep right now is
+        // already in the header of the main screen ("Schlaf" / "Sleep").
+        else if (lv == 0 && p == 5 && !std::isnan(id(asa).state) &&
+                 id(asa).state > 0) { num = id(asa).state;              unit = "m"; }
+
+        // The back pages get an arrow instead of a second word -
+        // "ZURUECK" already stands in the label line above.
+        const bool isBack = (lv == 0 && p == 6) || (lv == 1 && p == 4) ||
+                            (lv == 2 && p == 2);
+        if (isBack) {
+          it.line(50, 45, 74, 45);
+          it.line(50, 46, 74, 46);
+          it.line(50, 45, 57, 38);
+          it.line(50, 46, 57, 53);
+        } else if (num >= 0.0f) {
+          std::string nb = str_sprintf("%.0f", num);
+          int tx, ty, tw, th;
+          it.get_text_bounds(0, 0, nb.c_str(), id(font_num),
+                             TextAlign::BASELINE_LEFT, &tx, &ty, &tw, &th);
+          // ty is the distance from the top edge to the baseline, and negative.
+          // The baseline is computed from it instead of being fixed - otherwise
+          // the digits reach into the label line above. A top edge of 36 leaves
+          // two pixels of air to the label, which ends at 33.
+          int base = 36 - ty;
+          if (base > 61) base = 61;
+          int uw = (unit[0] == 0) ? 0 : 6;
+          int total = tw + (uw ? 3 + uw : 0);
+          int x0 = 17 + (92 - total) / 2;
+          if (x0 < 17) x0 = 17;
+          it.print(x0, base, id(font_num), TextAlign::BASELINE_LEFT, nb.c_str());
+          if (uw) it.print(x0 + tw + 3, base - 7, id(font1), unit);
+          blkX = x0;
+          blkW = total;
+        } else {
+          // The "Pre-infusion" entry shows its state one level up already -
+          // no need to go a level deeper for that.
+          const char *w;
+          const char *ON  = mde ? "EIN" : "ON";
+          const char *OFF = mde ? "AUS" : "OFF";
+          if (lv == 2 && p == 0)      w = id(sleep_mode_sw).state ? ON : OFF;
+          // No value is something other than "off" - hence "?" instead of "OFF".
+          // If a question mark shows, the RP2040 is not reporting the value.
+          else if (lv == 2 && p == 1) w = std::isnan(id(asa).state) ? "?" : OFF;
+          else if (lv == 1 && p == 1) {
+            // Index 0 = fixed firmware times, 1 = the two menu values
+            auto mi = id(preinf_mode).active_index();
+            bool preset = !mi.has_value() || mi.value() == 0;
+            w = preset ? (mde ? "VORGABE" : "PRESET")
+                       : (mde ? "EIGENE"  : "CUSTOM");
+          }
+          else if (p == 0)            w = id(preinf_on).state ? ON : OFF;
+          else if (lv == 0 && p == 2) w = id(eco_mode_sw).state ? ON : OFF;
+          else if (lv == 0 && p == 3) w = mde ? "DE" : "EN";
+          else if (lv == 0 && p == 5) w = std::isnan(id(asa).state) ? "?" : OFF;
+          else                        w = "";
+          if (w[0] != 0) {
+            int wx, wy, ww, wh;
+            it.get_text_bounds(62, 40, w, id(font2), TextAlign::TOP_CENTER,
+                               &wx, &wy, &ww, &wh);
+            it.print(62, 40, id(font2), TextAlign::TOP_CENTER, w);
+            blkX = wx;
+            blkW = ww;
+          }
+        }
+
+        // [MOD] Plus and minus drawn instead of printed: in the 5x7 font the
+        // minus is only a thin dash, and at the case edge both looked stuck
+        // on. Bars 11 x 3, vertically centred on the value, seven pixels
+        // beside it - pushed to the edge only when it will not fit.
+        if (edit) {
+          const int cy = 47;
+          int lx = blkX - 12;
+          int rx = blkX + blkW + 12;
+          if (lx - 5 < 17)  lx = 22;
+          if (rx + 5 > 108) rx = 103;
+          it.filled_rectangle(lx - 5, cy - 1, 11, 3);
+          it.filled_rectangle(rx - 5, cy - 1, 11, 3);
+          it.filled_rectangle(rx - 1, cy - 5, 3, 11);
+        }
+        return;
+      }
+
+      // [MOD] The brew switch reports "brewing" even when the firmware does
+      // not let the pump start because the tank is empty. The timer therefore
+      // hangs on shot_valid, not on the raw switch signal - otherwise it
+      // would happily count up during a test with an empty tank.
       bool show_timer = (id(brewing).state && !id(water_low_sens).state) ||
                         (id(shot_valid) && id(brew_end_ms) > 0 &&
                          (millis() - id(brew_end_ms)) < 5000);
@@ -1131,27 +1658,27 @@ display:
                      (millis() - id(warm_ok_ms)) < 2000;
       bool warm = (id(status).state == "Warm");
 
-      // [MOD] Sprache der Displaytexte. Index 0 = English, 1 = Deutsch.
-      // active_index() liefert ein optional; faellt im Zweifel auf Englisch
-      // zurueck, damit nie ein leerer Text stehen bleibt.
+      // [MOD] Language of the display texts. Index 0 = English, 1 = German.
+      // active_index() returns an optional; in doubt it falls back to
+      // English, so no empty text is ever left standing.
       auto li = id(lang_sel).active_index();
       bool de = li.has_value() && li.value() == 1;
 
       if (show_ok) {
-        // Aufheizen fertig: gleiche Bildsprache wie beim Bezug, Tasse ohne Dampf
+        // Heat-up finished: same imagery as brewing, cup without steam
         it.print(17, 16, id(font1), de ? "BEREIT" : "READY");
         it.printf(108, 16, id(font1), TextAlign::TOP_RIGHT, "%.1f°", id(coffee_boiler_sens).state);
         it.image(17, 27, id(cup_still), id(white), id(black));
         it.print(79, 55, id(font_timer), TextAlign::BASELINE_CENTER, "OK");
 
       } else if (show_timer) {
-        // Bezug: Tasse wechselt zwischen den beiden Dampf-Frames
+        // Brewing: the cup alternates between the two steam frames
         it.printf(17, 16, id(font1), "%.1f°", id(coffee_boiler_sens).state);
         it.print(108, 16, id(font1), TextAlign::TOP_RIGHT, de ? "SEK" : "SEC");
-        // Tasse (32 px hoch) mittig im Bereich unter der Kopfzeile: 24..61
-        // ergibt Oberkante 27. Die Sekunden sitzen auf derselben Mittellinie
-        // und werden im Feld rechts der Tasse zentriert - so springt die
-        // Zahl nicht, wenn sie von einer auf zwei Stellen wechselt.
+        // Cup (32 px tall) centred in the area below the header: 24..61
+        // gives a top edge of 27. The seconds sit on the same centre line
+        // and are centred in the field right of the cup - so the number
+        // does not jump when it goes from one digit to two.
         if (((millis() / 430) % 2) == 0) {
           it.image(17, 27, id(cup_steam_a), id(white), id(black));
         } else {
@@ -1160,15 +1687,15 @@ display:
         it.printf(79, 55, id(font_timer), TextAlign::BASELINE_CENTER, "%.0f", id(brew_time).state);
 
       } else {
-        // Kopfzeile: Status links, Zustandssymbole rechts - nur wenn sie etwas
-        // bedeuten. rx wandert von rechts nach links, damit keine Luecken entstehen.
-        // Der Rohtext der Firmware ist zu lang: "Temperatures normalizing"
-        // waeren 24 Zeichen x 6 px = 144 px, das Fenster hat nur 96.
-        // Deshalb Kurzformen. Laengster Text ist "First run" mit 9 Zeichen
-        // = 54 px, endet bei x 71; das erste Symbol beginnt fruehestens
-        // bei x 80. Bis 16 Zeichen bliebe es kollisionsfrei zur rechten Kante.
-        // "Warm" ist der Rohtext der Firmware; angezeigt wird "Ready", weil
-        // das der tatsaechliche Zustand ist - die Maschine ist bezugsbereit.
+        // Header: status on the left, state symbols on the right - only when
+        // they mean something. rx walks right to left so no gaps appear.
+        // The firmware raw text is too long: "Temperatures normalizing"
+        // would be 24 chars x 6 px = 144 px, the window has only 96.
+        // Hence short forms. The longest is "First run" with 9 chars
+        // = 54 px, ending at x 71; the first symbol starts at x 80 at the
+        // earliest. Up to 16 chars it stays clear of the right edge.
+        // "Warm" is the firmware raw text; "Ready" is shown because that
+        // is the actual state - the machine is ready to brew.
         const char *st = "?";
         std::string lcc = id(status).state;
         if      (lcc == "Warm")                     st = de ? "Bereit" : "Ready";
@@ -1189,15 +1716,15 @@ display:
         if (id(filling_service_boiler_sens).state) {
           it.image(rx - 7, 16, id(pump_1x), id(white), id(black));
         }
-        // Das 8x8-Wassersymbol in der Kopfzeile entfaellt - bei leerem Tank
-        // steht die Warnung gross im Mittelfeld und muss nicht doppelt da sein.
+        // The 8x8 water symbol in the header is dropped - with an empty tank
+        // the warning stands large in the middle and need not appear twice.
 
         if (id(water_low_sens).state) {
-          // Wassertank leer: die grosse Temperatur weicht der Warnung.
-          // 16x16-Symbol (no_water_2x) statt der 8x8-Variante, daneben das Wort.
-          // Die Breite des Wortes wird nicht geschaetzt, sondern gemessen -
-          // "WASSER" ist deutlich breiter als "WATER", und eine feste
-          // x-Position waere fuer eines von beiden immer falsch.
+          // Water tank empty: the large temperature gives way to the warning.
+          // 16x16 symbol (no_water_2x) instead of the 8x8 one, word beside it.
+          // The width of the word is measured, not guessed -
+          // "WASSER" is much wider than "WATER", and a fixed x position
+          // would always be wrong for one of the two.
           const char *wtxt = de ? "WASSER" : "WATER";
           int tx, ty, tw, th;
           it.get_text_bounds(0, 0, wtxt, id(font_warn), TextAlign::BASELINE_LEFT,
@@ -1205,26 +1732,26 @@ display:
           const int gap = 6;
           int bx = 17 + (92 - (16 + gap + tw)) / 2;   // Block waagerecht zentrieren
           if (bx < 17) bx = 17;                       // Notbremse, falls doch zu breit
-          // Senkrecht: Symbol 31..46, Grundlinie 44 - beide Mitten liegen bei 39
+          // Vertically: symbol 31..46, baseline 44 - both centres sit at 39
           it.image(bx, 31, id(no_water), id(white), id(black));
           it.print(bx + 16 + gap, 44, id(font_warn), TextAlign::BASELINE_LEFT, wtxt);
-          // Fusszeile links: jetzt der Istwert - der Sollwert hilft nicht,
-          // solange ohnehin nicht gebrueht werden kann.
+          // Footer left: the actual value now - the set point does not help
+          // while brewing is impossible anyway.
           it.printf(17, 55, id(font1), "%.1f°", id(coffee_boiler_sens).state);
 
         } else {
-          // Brühtemperatur gross. Grundlinie 50 zentriert die rund 21 px hohen
-          // Ziffern im Feld 23..54 zwischen Kopf- und Fusszeile.
+          // Brew temperature large. Baseline 50 centres the roughly 21 px
+          // digits in the field 23..54 between header and footer.
           it.printf(17, 50, id(font_num), TextAlign::BASELINE_LEFT, "%.1f°",
                     id(coffee_boiler_sens).state);
 
-          // Fusszeile: links der Sollwert - direkt unter seinem Istwert, deshalb
-          // ohne Beschriftung. Blinkt im Sekundentakt, solange nicht "Warm".
+          // Footer: the set point on the left - directly under its actual
+          // value, hence unlabelled. Blinks once a second while not "Warm".
           if (warm || ((millis() / 1000) % 2) == 0) {
             it.printf(17, 55, id(font1), "%.1f", id(coffee_set_point).state);
           }
         }
-        // Rechts der Dampfkessel, im Eco-Modus stattdessen der Hinweis
+        // Steam boiler on the right, or the Eco note instead
         if (id(eco_mode_sw).state) {
           it.print(108, 55, id(font1), TextAlign::TOP_RIGHT, "Eco");
         } else {
