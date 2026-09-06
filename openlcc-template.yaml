@@ -1,4 +1,5 @@
-# openlcc-sale.yaml - build for the boards being sold, without personal specifics.
+# openlcc-template.yaml - generic build without personal/site-specific settings,
+# a starting point for any board this firmware runs on.
 # DERIVED FILE: generated 1:1 from openlcc.yaml (state: 2026-09-06); it differs
 # only in this header, in name_add_mac_suffix and in the missing
 # wifi.use_address. Do not edit directly - changes belong in openlcc.yaml and
@@ -6,7 +7,7 @@
 #
 # Per board, before flashing:
 #   - a fresh API encryption key (e.g. openssl rand -base64 32) in secrets.yaml
-#   - the buyer's WiFi credentials, or let the buyer enter them through the
+#   - the operator's WiFi credentials, or let them be entered through the
 #     "Smart-LCC Setup" access point
 
 external_components:
@@ -75,7 +76,7 @@ wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
   # use_address is deliberately left out: that was the personal, DHCP-reserved
-  # address from openlcc.yaml and means nothing on a buyer's board. Without the
+  # address from openlcc.yaml and means nothing on another board. Without the
   # line ESPHome simply uses DHCP plus mDNS (*.local).
   # [MOD] Otherwise ESPHome puts the ESP32 into a WiFi power-save mode that
   # raises latency on a weak signal. Counterproductive at around -90 dBm.
@@ -84,7 +85,7 @@ wifi:
   # without ap: it had no effect - ESPHome warned about it at build time. If
   # the board cannot join the configured WiFi it opens this network of its
   # own after the timeout; in a browser every address then leads to the setup
-  # page. That is the real purpose for the boards being sold: the buyer
+  # page. That is the whole point of this fallback: whoever runs the board
   # enters their own WiFi without having to rebuild the firmware.
   ap:
     ssid: "Smart-LCC Setup"
@@ -254,7 +255,7 @@ switch:
     icon: "mdi:water-outline"
   # [MOD] Visibility of the pages in the button menu. Only these six switches
   # decide what appears when paging on the machine - "Back" is always
-  # there. All can be on for the boards being sold; here, less is enough.
+  # there. All are on by default here; trim it down per board as needed.
   - platform: template
     name: "Menu: Pre-Infusion"
     id: menu_show_preinf
@@ -364,7 +365,7 @@ select:
       - "Preset"
       - "Custom"
     # [MOD] New devices start adjustable - otherwise the menu values would
-    # only take effect for the buyer after switching. Existing choice is kept.
+    # only take effect after switching manually. Existing choice is kept.
     initial_option: "Custom"
     optimistic: true
     restore_value: true
