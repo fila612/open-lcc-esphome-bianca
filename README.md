@@ -1,36 +1,34 @@
-# Open LCC ESP32-S3 firmware for Lelit Bianca based on ESPHome
+# Open LCC ESPHome – Lelit Bianca (fila612 fork)
 
-This is meant as a companion firmware to the [open-lcc/rp2040-bianca](https://github.com/open-lcc/rp2040-bianca) firmware. The Open LCC hardware has two microcontrollers, the RP2040, which controls commmunication with the Gicar Control Board, and the ESP32-S3, which communicates with the world. This firmware is based on ESPHome, because it was an easy way to get started with it. In the future, a more custom firmware might be more performant an easier to use in some cases, but as of writing, this is the firmware that exists.
+ESPHome-based firmware for the ESP32-S3 half of the [Open LCC](https://github.com/open-lcc) hardware mod for the Lelit Bianca. Companion to the [open-lcc/rp2040-bianca](https://github.com/open-lcc/rp2040-bianca) firmware, which runs on the RP2040 and talks to the machine's Gicar control board; the ESP32-S3 handles Wi-Fi, Home Assistant and the display.
 
-This project is basically a large ESPHome yaml configuration. You are meant to modify this. 
+This repository is a fork of [variegated-coffee/open-lcc-esphome-bianca](https://github.com/variegated-coffee/open-lcc-esphome-bianca), the original ESPHome configuration for this hardware. That upstream README, project background and licensing terms still apply and are worth reading there.
+
+## Why this fork exists
+
+The upstream `main` branch was the starting point. From there, this fork's goal is **feature parity with the machine's original Gicar/Lelit firmware**, plus keeping the build alive on current ESPHome. Since branching off, the main additions are:
+
+- **ESPHome upgraded from 2023.x to 2026.x**, including the compatibility fixes that migration required: `ota: platform: esphome`, `type:` on `image:` entries, an `esp_random.h` include for ESP-IDF ≥ 5.x, a patch removing an internal ESPHome API call from the stream server component that no longer exists, disabling `esp32_ble_tracker` (ESPHome ≥ 2025.7 rejects it together with `power_save_mode: NONE`), and splitting the water-tank sensor into its own platform entry to avoid a circular-dependency deadlock at compile time.
+- **A full button-driven menu on the OLED**, built from scratch: seven top-level entries with submenus for pre-infusion and sleep, short press to page or adjust a value, long press to open or confirm, an eight-second timeout, and six switches to hide individual entries per board. Language switch between English and German.
+- **Reworked pre-infusion**, rebuilt from the original LCC's behavior (build pressure, then pause, then continue): a **Preset** mode using the RP2040's fixed timing, and a **Custom** mode with two menu-adjustable values (pressure time, pause) — Custom is the default for new devices.
+- **Sleep mode matching the original control panel**: the OLED turns off (not just the boiler) to avoid burn-in, and the +/- buttons now end sleep mode directly, the same as on the stock LCC panel — confirmed working on the machine.
+- **More reliable shot counting and water-tank handling**: persistent shot counters across reboots, a minimum-shot-duration filter to keep flushes out of the count, a flag that discards a "brew" if the tank ran dry mid-shot so it isn't counted or timed, and a rebuilt brief "OK" confirmation on the display when the boiler reaches its target temperature (matching the original LCC).
+- **Wi-Fi setup made resilient**: a fallback access point (`Smart-LCC Setup`) so a board that can't join the configured network is still reachable to set up Wi-Fi from a browser — the point for boards being sold, no rebuild needed — plus fixing `power_save_mode: NONE`, which ESPHome was silently ignoring and which raises latency on a weak signal.
+- **A new OLED display layout** designed for this hardware (large digits, icon set, sleep power-off, calibration view), plus a calibration frame to line up the visible area behind the case bezel and a runtime-toggleable verbose-log switch for diagnostics.
+- **Web server updated to v3** with a grouped, sortable card layout.
+
+Progress toward that parity goal is tracked via the project version in `openlcc.yaml` (currently 0.9.0; 1.0 marks full parity with the original LCC firmware, confirmed on the machine).
+
+`openlcc.yaml` is the active configuration to build and flash. `esphome.yaml` is kept as a frozen reference of the pre-fork upstream state and is not built anymore.
 
 ## Compatibility
 
-This firmware is compatible with Open LCC Board R1A through R2B. Furthermore, it's *known* to be compatible with the Bianca V2, but it's strongly suspected that it is compatible with Bianca V1, and Bianca V3 (with exception for the
- new Power LED). If you have a Bianca V3 and is interested in installing this project, let me (@magnusnordlander) know and we can work together on getting it fully compatible.
+Compatible with Open LCC board R1A through R2B, on a Lelit Bianca V2 (confirmed) and very likely V1/V3.
 
 ## Disclaimer
 
-Considering this plugs in to an expensive machine it bears to mention: Anything you do with this, you do at your own risk. Components have been fried already during the course of this project. Your machine uses both line voltage power, high pressured hot water, steam and other dangerous components. There is a risk of both damaging the machine, personal injury and property damage, the liability for which you assume yourself. This is not the stage to get on board with this project if you aren't willing to deal with those risks.
-
-## Status
-
-Consider this project beta quality.
-
-### Versioning
-This project uses Semver. The major version number is increased whe RP2040 <-> ESP32 protocol version is increased (as that is a BC break).
-
-## Project goals
-
-Create a firmware for using the Open LCC in a Lelit Bianca to its fullest extent.
-
-### Extension boards
-The Open LCC hardware has QWIIC interfaces to allow for extension. Specifically, the ESP32-S3 has one QWIIC interface. The ESPHome ecosystem supports a number of different components that can be connected via I2C.
-
-## Building
-
-The project is built using the regular ESPHome build chain. It includes options to upload firmware both over USB and over Wi-fi.
+This connects to an expensive machine that runs on line voltage, hot pressurized water and steam. Use at your own risk — damage to the machine, personal injury and property damage are all possible, and the liability is yours. Components have already been damaged during development.
 
 ## Licensing
 
-The firmware in itself is MIT licensed. If you include components licensed under the GPL (such as the serial bridge component), the firmware becomes GPL licensed. If you're just using the firmware yourself, this doesn't really matter. If you're distributing the firmware 
+The firmware itself is MIT licensed. Including GPL-licensed components (e.g. the serial bridge/stream server) makes the resulting firmware GPL. This only matters if you distribute it, not if you build and flash it for yourself.
