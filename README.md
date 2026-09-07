@@ -1,4 +1,4 @@
-# Open LCC ESPHome – Lelit Bianca (fila612 fork)
+# Open LCC ESPHome – Lelit Bianca (my fork)
 
 ESPHome-based firmware for the ESP32-S3 half of the [Open LCC](https://github.com/open-lcc) hardware mod for the Lelit Bianca. Companion to the [open-lcc/rp2040-bianca](https://github.com/open-lcc/rp2040-bianca) firmware, which runs on the RP2040 and talks to the machine's Gicar control board; the ESP32-S3 handles Wi-Fi, Home Assistant and the display.
 
