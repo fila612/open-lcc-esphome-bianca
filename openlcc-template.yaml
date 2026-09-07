@@ -113,7 +113,10 @@ uart:
   tx_pin: GPIO17
   rx_pin: GPIO18
 
-esp32_ble_tracker:
+# [MOD] Commented out together with the BLE components below: ESPHome >= 2025.7
+# rejects power_save_mode: NONE together with an active esp32_ble_tracker.
+# Uncomment together with Acaia/Pressensor if BLE is needed.
+#esp32_ble_tracker:
 
 
 # If using the Acaia integration, uncomment this
@@ -657,6 +660,28 @@ text_sensor:
 #    name: "BLE Devices Scanner"
 
 binary_sensor:
+  # [MOD] water_tank_low split into its own platform: open_lcc_bianca entry,
+  # defined before the one below. brewing's on_press lambda reads
+  # id(water_low_sens); ESPHome >= 2025.7 processes all sub-sensors of one
+  # platform entry in a single coroutine in schema order (brewing before
+  # water_tank_low), so referencing water_low_sens from within the same entry
+  # deadlocks as a circular dependency at compile time. A separate, earlier
+  # entry finishes first and hands the C++ layer two independent instances of
+  # the same underlying component - harmless, see OpenLCCBiancaBinarySensor.h.
+  - platform: open_lcc_bianca
+    water_tank_low:
+      name: Water Tank Low
+      web_server:
+        sorting_group_id: grp_betrieb
+        sorting_weight: 100
+      id: water_low_sens
+      # [MOD] internal removed - the water alarm belongs in Home Assistant so
+      # you can get notified. device_class: problem makes it appear there as
+      # a fault rather than a plain on/off.
+      device_class: problem
+      # [MOD] If the tank runs dry mid-brew, the rest is no longer a brew
+      on_press:
+        - lambda: 'id(shot_valid) = false;'
   # [MOD] The internal mirror "Template Currently Brewing" is gone: it came
   # from the TFT page switching, was never read anywhere and sat confusingly
   # next to the real sensor in the web interface.
@@ -723,19 +748,6 @@ binary_sensor:
         sorting_weight: 60
       id: filling_service_boiler_sens
       internal: true
-    water_tank_low:
-      name: Water Tank Low
-      web_server:
-        sorting_group_id: grp_betrieb
-        sorting_weight: 100
-      id: water_low_sens
-      # [MOD] internal removed - the water alarm belongs in Home Assistant so
-      # you can get notified. device_class: problem makes it appear there as
-      # a fault rather than a plain on/off.
-      device_class: problem
-      # [MOD] If the tank runs dry mid-brew, the rest is no longer a brew
-      on_press:
-        - lambda: 'id(shot_valid) = false;'
     brew_boiler_heating:
       name: Brew Boiler Heating
       icon: "mdi:fire"
