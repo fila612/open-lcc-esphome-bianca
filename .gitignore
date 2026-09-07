@@ -1,5 +1,7 @@
 .esphome
 secrets.yaml
 CLAUDE.md
+openlcc.yaml
+openlcc_old.yaml
 .venv
 .vscode
