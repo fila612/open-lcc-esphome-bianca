@@ -23,7 +23,7 @@ Progress toward that parity goal is tracked via the project version in `openlcc.
 
 ## Compatibility
 
-Per the upstream project, Open LCC board revisions R1A through R2B are supported. This fork is running on a newer Main Board R2C (with Debug Board R2A) on a Lelit Bianca V1 - confirmed working. V2 and V3 machines are expected to work too, but haven't been personally verified.
+Per the upstream project, Open LCC board revisions R1A through R2B are supported. This fork is running on a newer Main Board R2C on a Lelit Bianca V1 - confirmed working. V2 and V3 machines are expected to work too, but haven't been personally verified.
 
 ## Disclaimer
 
