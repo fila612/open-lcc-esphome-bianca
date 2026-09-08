@@ -23,7 +23,7 @@ Progress toward that parity goal is tracked via the project version in `openlcc.
 
 ## Compatibility
 
-Compatible with Open LCC board R1A through R2B, on a Lelit Bianca V2 (confirmed) and very likely V1/V3.
+Compatible with Open LCC board R1A through R2B. Running this on a Lelit Bianca V1 (confirmed - that's what it's built and tested on); V2 and V3 are expected to work but not personally verified.
 
 ## Disclaimer
 
