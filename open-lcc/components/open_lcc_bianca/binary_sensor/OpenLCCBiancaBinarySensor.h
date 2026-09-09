@@ -37,6 +37,9 @@ namespace esphome {
                 if (service_boiler_heating_ != nullptr) {
                     service_boiler_heating_->publish_state(message.serviceBoilerOn);
                 }
+                if (operational_ready_ != nullptr) {
+                    operational_ready_->publish_state(message.operationalReady);
+                }
             }
 
             void set_brewing(esphome::binary_sensor::BinarySensor *brewing) { brewing_ = brewing; }
@@ -44,12 +47,15 @@ namespace esphome {
             void set_water_tank_low(esphome::binary_sensor::BinarySensor *water_tank_low) { water_tank_low_ = water_tank_low; }
             void set_brew_boiler_heating(esphome::binary_sensor::BinarySensor *sens) { brew_boiler_heating_ = sens; }
             void set_service_boiler_heating(esphome::binary_sensor::BinarySensor *sens) { service_boiler_heating_ = sens; }
+            // [MOD] One-time latch, see esp-protocol.h's ESPSystemStatusMessage::operationalReady.
+            void set_operational_ready(esphome::binary_sensor::BinarySensor *sens) { operational_ready_ = sens; }
         protected:
             esphome::binary_sensor::BinarySensor *brewing_{nullptr};
             esphome::binary_sensor::BinarySensor *filling_service_boiler_{nullptr};
             esphome::binary_sensor::BinarySensor *water_tank_low_{nullptr};
             esphome::binary_sensor::BinarySensor *brew_boiler_heating_{nullptr};
             esphome::binary_sensor::BinarySensor *service_boiler_heating_{nullptr};
+            esphome::binary_sensor::BinarySensor *operational_ready_{nullptr};
         };
     }
 }

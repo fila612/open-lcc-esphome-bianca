@@ -12,6 +12,7 @@ CONF_FILLING_SERVICE_BOILER = "filling_service_boiler"
 CONF_WATER_TANK_LOW = "water_tank_low"
 CONF_BREW_BOILER_HEATING = "brew_boiler_heating"
 CONF_SERVICE_BOILER_HEATING = "service_boiler_heating"
+CONF_OPERATIONAL_READY = "operational_ready"
 
 OpenLCCBiancaSensor = open_lcc_bianca_ns.class_(
     "OpenLCCBiancaBinarySensor",
@@ -38,6 +39,9 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_SERVICE_BOILER_HEATING): binary_sensor.binary_sensor_schema(
             icon=ICON_RADIOACTIVE,
         ),
+        cv.Optional(CONF_OPERATIONAL_READY): binary_sensor.binary_sensor_schema(
+            icon=ICON_RADIOACTIVE,
+        ),
     }
 )
 
@@ -46,18 +50,28 @@ async def to_code(config):
     await cg.register_component(var, config)
     await cg.register_parented(var, config[CONF_OPEN_LCC_BIANCA_ID])
 
+    # [MOD] water_tank_low is created before brewing/filling_service_boiler on purpose: their
+    # on_press automations (in openlcc.yaml) reference id(water_low_sens) in a lambda, and
+    # ESPHome's codegen coroutine suspends this whole to_code() call while resolving that
+    # reference. Since a suspended coroutine can't jump ahead to code further down in itself,
+    # creating water_tank_low earlier in this same function is what lets that reference ever
+    # resolve - previously this was a genuine self-inflicted "circular dependency" (this
+    # function waiting on something only its own, not-yet-reached code could produce).
+    if water_tank_low_config := config.get(CONF_WATER_TANK_LOW):
+        sens = await binary_sensor.new_binary_sensor(water_tank_low_config)
+        cg.add(var.set_water_tank_low(sens))
     if brewing_config := config.get(CONF_BREWING):
         sens = await binary_sensor.new_binary_sensor(brewing_config)
         cg.add(var.set_brewing(sens))
     if filling_config := config.get(CONF_FILLING_SERVICE_BOILER):
         sens = await binary_sensor.new_binary_sensor(filling_config)
         cg.add(var.set_filling_service_boiler(sens))
-    if water_tank_low_config := config.get(CONF_WATER_TANK_LOW):
-        sens = await binary_sensor.new_binary_sensor(water_tank_low_config)
-        cg.add(var.set_water_tank_low(sens))
     if brew_boiler_heating_conf := config.get(CONF_BREW_BOILER_HEATING):
         sens = await binary_sensor.new_binary_sensor(brew_boiler_heating_conf)
         cg.add(var.set_brew_boiler_heating(sens))
     if service_boiler_heating_conf := config.get(CONF_SERVICE_BOILER_HEATING):
         sens = await binary_sensor.new_binary_sensor(service_boiler_heating_conf)
         cg.add(var.set_service_boiler_heating(sens))
+    if operational_ready_conf := config.get(CONF_OPERATIONAL_READY):
+        sens = await binary_sensor.new_binary_sensor(operational_ready_conf)
+        cg.add(var.set_operational_ready(sens))
