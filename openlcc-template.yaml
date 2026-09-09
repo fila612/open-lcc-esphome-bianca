@@ -1,6 +1,6 @@
 # openlcc-template.yaml - generic build without personal/site-specific settings,
 # a starting point for any board this firmware runs on.
-# DERIVED FILE: generated 1:1 from openlcc.yaml (state: 2026-09-07); it differs
+# DERIVED FILE: generated 1:1 from openlcc.yaml (state: 2026-09-09); it differs
 # only in this header, in name_add_mac_suffix and in the missing
 # wifi.use_address. Do not edit directly - changes belong in openlcc.yaml and
 # are derived from there again.
@@ -39,7 +39,7 @@ esphome:
     # [MOD] Own versioning starts here. 0.0.1 was the untouched upstream state.
     # 1.0 is reached once the original LCC's functions are fully reproduced
     # AND confirmed on the machine.
-    version: 0.9.0
+    version: 0.9.1
   name: smart-lcc
   # [MOD] Unlike the personal build this appends the MAC suffix, so several
   # boards can run on the same network without colliding on hostname and mDNS.
@@ -109,11 +109,17 @@ ota:
         - delay: 3s
 
 uart:
+  id: uart_lcc
   baud_rate: 115200
   tx_pin: GPIO17
   rx_pin: GPIO18
 
-esp32_ble_tracker:
+# [MOD] Commented out together with the Acaia/Pressensor blocks below: an
+# active esp32_ble_tracker pulls in the esp32_ble stack even with no BLE
+# client configured, and that stack is incompatible with
+# power_save_mode: NONE above (ESPHome esphome/issues#2141). Uncomment this
+# along with whichever of Acaia/Pressensor you actually use.
+#esp32_ble_tracker:
 
 
 # If using the Acaia integration, uncomment this
@@ -348,6 +354,7 @@ switch:
 
 open_lcc_bianca:
   id: lcc_1
+  uart_id: uart_lcc
 
 # [MOD] Which path the pre-infusion takes
 select:
@@ -617,11 +624,9 @@ globals:
     type: uint32_t
     restore_value: yes
     initial_value: '0'
-  # [MOD] Rebuild of the original display: a brief "OK" on reaching "Warm"
-  - id: was_warm
-    type: bool
-    restore_value: no
-    initial_value: 'false'
+  # [MOD] Rebuild of the original display: a brief "OK" on reaching operational_ready.
+  # (was_warm is gone: it tracked edges on LCC Status "Warm", which oscillates with normal PID
+  # settling and re-triggered this flash every time - see operational_ready's on_press below.)
   - id: warm_ok_ms
     type: uint32_t
     restore_value: no
@@ -641,18 +646,24 @@ text_sensor:
       id: status
       name: LCC Status
       icon: "mdi:state-machine"
-      # [MOD] Only remember the edge into "Warm". The 15-second lockout
-      # keeps the message from appearing right after every reboot.
-      on_value:
-        - lambda: |-
-            bool warm = (x == "Warm");
-            if (warm && !id(was_warm) && millis() > 15000) {
-              id(warm_ok_ms) = millis();
-            }
-            id(was_warm) = warm;
       web_server:
         sorting_group_id: grp_betrieb
         sorting_weight: 10
+  # [MOD] Static, manually-maintained string - not queried live from the RP2040. Bump this by
+  # hand whenever RP2040_FIRMWARE_VERSION_STRING (open-lcc-rp2040-bianca/src/version.h) changes,
+  # same as this file's own esphome: project: version above. internal: true keeps it off the
+  # Home Assistant entity list; include_internal: true on web_server (see below) still shows it
+  # on this device's local web page.
+  - platform: template
+    name: RP2040 Firmware Version
+    id: rp2040_firmware_version
+    icon: "mdi:chip"
+    lambda: |-
+      return {"0.2.1"};
+    web_server:
+      sorting_group_id: grp_diag
+      sorting_weight: 65
+    internal: true
 #  - platform: ble_scanner
 #    name: "BLE Devices Scanner"
 
@@ -736,6 +747,26 @@ binary_sensor:
       # [MOD] If the tank runs dry mid-brew, the rest is no longer a brew
       on_press:
         - lambda: 'id(shot_valid) = false;'
+    # [MOD] New 2026-09-09: a one-time latch from the RP2040 (see esp-protocol.h's
+    # ESPSystemStatusMessage::operationalReady) - true once the heat-up sequence has finished
+    # AND the boiler has actually settled at target at least once since the last cold start or
+    # sleep cycle. Unlike LCC Status "Warm" (which flips back and forth as the PID oscillates
+    # around the set point during normal operation), this stays true through that oscillation -
+    # it only goes false again on a real cold start or a sleep cycle. Not internal: a "machine
+    # is ready" signal is genuinely useful for Home Assistant automations.
+    operational_ready:
+      name: Operational Ready
+      icon: "mdi:coffee-outline"
+      web_server:
+        sorting_group_id: grp_betrieb
+        sorting_weight: 105
+      id: operational_ready_sens
+      # [MOD] Drives the brief "READY"/"BEREIT" flash on the display (see warm_ok_ms/show_ok
+      # below). on_press is an edge trigger - fires exactly once when this latch turns on, not
+      # on every value published - so unlike the old "Warm" text-sensor-based trigger it can't
+      # retrigger from ordinary PID oscillation around the set point.
+      on_press:
+        - lambda: 'id(warm_ok_ms) = millis();'
     brew_boiler_heating:
       name: Brew Boiler Heating
       icon: "mdi:fire"
