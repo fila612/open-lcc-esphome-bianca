@@ -114,9 +114,17 @@ namespace esphome {
 
         void OpenLCCBianca::handleSystemStatusMessage(ESPMessageHeader *header) {
             ESP_LOGV("LCC", "Handling system status");
-            if (header->length == sizeof(ESPSystemStatusMessage)) {
+            // [MOD] Accept messages up to our current struct size, not only an exact match: an
+            // older RP2040 firmware without a field we now know about (fields are always
+            // appended at the end, never inserted - see esp-protocol.h) sends a shorter message.
+            // Reading exactly header->length bytes into a zero-initialized struct leaves any
+            // fields it didn't send at their default value, instead of desyncing the UART stream
+            // (the previous exact-length check silently left unread bytes in the buffer on any
+            // mismatch, corrupting the next message's parse - a real, pre-existing bug, not
+            // specific to this change).
+            if (header->length <= sizeof(ESPSystemStatusMessage)) {
                 ESPSystemStatusMessage message{};
-                bool success = this->read_array(reinterpret_cast<uint8_t *>(&message), sizeof(message));
+                bool success = this->read_array(reinterpret_cast<uint8_t *>(&message), header->length);
 
                 if (success) {
                     ackMessage(header);
@@ -130,7 +138,21 @@ namespace esphome {
                     nackMessage(header);
                 }
             } else {
-                ESP_LOGD("LCC", "Wrong length, expected %u, was %u", sizeof(ESPSystemStatusMessage), header->length);
+                ESP_LOGD("LCC", "Wrong length, expected at most %u, was %u", sizeof(ESPSystemStatusMessage), header->length);
+                // [MOD] Still consume the bytes the sender says it sent, even though this build
+                // doesn't know how to interpret all of them (a newer RP2040 firmware than this
+                // ESP32 side knows about) - otherwise they'd desync the next message's parse, the
+                // same bug an unhandled short message used to hit before this change.
+                uint8_t discard[sizeof(ESPSystemStatusMessage)];
+                uint32_t remaining = header->length;
+                while (remaining > 0) {
+                    uint32_t chunk = remaining < sizeof(discard) ? remaining : sizeof(discard);
+                    if (!this->read_array(discard, chunk)) {
+                        break;
+                    }
+                    remaining -= chunk;
+                }
+                nackMessage(header);
             }
         }
 
