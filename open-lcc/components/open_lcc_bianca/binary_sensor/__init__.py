@@ -50,16 +50,21 @@ async def to_code(config):
     await cg.register_component(var, config)
     await cg.register_parented(var, config[CONF_OPEN_LCC_BIANCA_ID])
 
-    # [MOD] water_tank_low is created before brewing/filling_service_boiler on purpose: their
-    # on_press automations (in openlcc.yaml) reference id(water_low_sens) in a lambda, and
-    # ESPHome's codegen coroutine suspends this whole to_code() call while resolving that
-    # reference. Since a suspended coroutine can't jump ahead to code further down in itself,
-    # creating water_tank_low earlier in this same function is what lets that reference ever
-    # resolve - previously this was a genuine self-inflicted "circular dependency" (this
-    # function waiting on something only its own, not-yet-reached code could produce).
+    # [MOD] water_tank_low and operational_ready are created before brewing/
+    # filling_service_boiler on purpose: brewing's on_press automation (in openlcc.yaml)
+    # references id(water_low_sens) and id(operational_ready_sens) in a lambda, and ESPHome's
+    # codegen coroutine suspends this whole to_code() call while resolving each reference. Since
+    # a suspended coroutine can't jump ahead to code further down in itself, creating both
+    # earlier in this same function is what lets those references ever resolve - otherwise this
+    # is a genuine self-inflicted "circular dependency" (this function waiting on something only
+    # its own, not-yet-reached code could produce). Any future on_press/on_release/lambda
+    # reference from one of these entities to another must respect the same ordering constraint.
     if water_tank_low_config := config.get(CONF_WATER_TANK_LOW):
         sens = await binary_sensor.new_binary_sensor(water_tank_low_config)
         cg.add(var.set_water_tank_low(sens))
+    if operational_ready_conf := config.get(CONF_OPERATIONAL_READY):
+        sens = await binary_sensor.new_binary_sensor(operational_ready_conf)
+        cg.add(var.set_operational_ready(sens))
     if brewing_config := config.get(CONF_BREWING):
         sens = await binary_sensor.new_binary_sensor(brewing_config)
         cg.add(var.set_brewing(sens))
@@ -72,6 +77,3 @@ async def to_code(config):
     if service_boiler_heating_conf := config.get(CONF_SERVICE_BOILER_HEATING):
         sens = await binary_sensor.new_binary_sensor(service_boiler_heating_conf)
         cg.add(var.set_service_boiler_heating(sens))
-    if operational_ready_conf := config.get(CONF_OPERATIONAL_READY):
-        sens = await binary_sensor.new_binary_sensor(operational_ready_conf)
-        cg.add(var.set_operational_ready(sens))
