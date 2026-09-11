@@ -18,7 +18,7 @@ The upstream `main` branch was the starting point. From there, this fork's goal 
 - **A new OLED display layout** designed for this hardware (large digits, icon set, sleep power-off, calibration view), plus a calibration frame to line up the visible area behind the case bezel and a runtime-toggleable verbose-log switch for diagnostics.
 - **Web server updated to v3** with a grouped, sortable card layout.
 
-Progress toward that parity goal is tracked via the project version in `openlcc.yaml` (currently 0.9.2; 1.0 marks full parity with the original LCC firmware, confirmed on the machine).
+Progress toward that parity goal is tracked via the project version in `openlcc.yaml` (currently 0.9.3; 1.0 marks full parity with the original LCC firmware, confirmed on the machine). The RP2040 side's own running firmware version is reported live (not a manually-maintained value) as a "RP2040 Firmware Version" text sensor — visible on this device's local web server.
 
 `openlcc.yaml` is the active configuration to build and flash. `esphome.yaml` is kept as a frozen reference of the pre-fork upstream state and is not built anymore.
 

@@ -5,6 +5,7 @@
 #ifndef SMART_LCC_OPENLCCBIANCATEXTSENSOR_H
 #define SMART_LCC_OPENLCCBIANCATEXTSENSOR_H
 
+#include <cstdio>
 #include "esphome/core/defines.h"
 #include "esphome/core/component.h"
 #include "esphome/components/text_sensor/text_sensor.h"
@@ -25,6 +26,17 @@ namespace esphome {
                 auto stateString = prettifyCoalescedStateString(message.coalescedState);
                 if (status_ != nullptr && (!status_->has_state() || status_->state != stateString)) {
                     status_->publish_state(stateString);
+                }
+
+                // [MOD] Live RP2040 firmware version, read from the status message instead of a
+                // manually-maintained string - see esp-protocol.h's firmwareVersionMajor/Minor/Patch.
+                char versionBuf[12];
+                snprintf(versionBuf, sizeof(versionBuf), "%u.%u.%u",
+                         message.firmwareVersionMajor, message.firmwareVersionMinor, message.firmwareVersionPatch);
+                std::string versionString(versionBuf);
+                if (rp2040_firmware_version_ != nullptr &&
+                    (!rp2040_firmware_version_->has_state() || rp2040_firmware_version_->state != versionString)) {
+                    rp2040_firmware_version_->publish_state(versionString);
                 }
             }
 
@@ -50,8 +62,10 @@ namespace esphome {
             }
 
             void set_status(esphome::text_sensor::TextSensor *status) { status_ = status; }
+            void set_rp2040_firmware_version(esphome::text_sensor::TextSensor *sens) { rp2040_firmware_version_ = sens; }
         protected:
             esphome::text_sensor::TextSensor *status_{nullptr};
+            esphome::text_sensor::TextSensor *rp2040_firmware_version_{nullptr};
         };
     }
 }
