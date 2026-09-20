@@ -10,6 +10,7 @@
 #include "esphome/components/sensor/sensor.h"
 #include "esphome/core/helpers.h"
 #include "../esp-protocol.h"
+#include "../BrewStateTracker.h"
 #include "../OpenLCCBianca.h"
 
 namespace esphome {
@@ -54,7 +55,7 @@ namespace esphome {
                     brew_time_->publish_state(0.f);
                 }
 
-                if (message.currentlyBrewing) {
+                if (brew_state_.update(message)) {
                     if (!wasBrewing) {
                         latestBrewStart = millis();
                         wasBrewing = true;
@@ -98,6 +99,7 @@ namespace esphome {
             esphome::sensor::Sensor *current_routine_{nullptr};
             esphome::sensor::Sensor *current_routine_step_{nullptr};
 
+            BrewStateTracker brew_state_;
             bool wasBrewing = false;
             uint32_t latestBrewStart = 0;
         };

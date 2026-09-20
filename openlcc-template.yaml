@@ -1,14 +1,11 @@
-# openlcc-template.yaml - generic build without personal/site-specific settings,
-# a starting point for any board this firmware runs on.
-# DERIVED FILE: generated 1:1 from openlcc.yaml (state: 2026-09-09); it differs
-# only in this header, in name_add_mac_suffix and in the missing
-# wifi.use_address. Do not edit directly - changes belong in openlcc.yaml and
-# are derived from there again.
+# openlcc-template.yaml - generic build without personal/site-specific settings.
+# DERIVED FILE: generated from openlcc.yaml by scripts/sync_template.py.
+# Only this header, name_add_mac_suffix and wifi.use_address differ.
+# Edit openlcc.yaml, then run the script; use --check before committing.
+# Review the diff for any new personal settings before publishing.
 #
-# Per board, before flashing:
-#   - a fresh API encryption key (e.g. openssl rand -base64 32) in secrets.yaml
-#   - the buyer's WiFi credentials, or let the buyer enter them through the
-#     "Smart-LCC Setup" access point
+# Per board, provide WiFi credentials and a fresh API key in secrets.yaml.
+# The fallback access point also allows WiFi setup without rebuilding.
 
 external_components:
   # Local, patched copy (fix: #include "esp_random.h" for ESP-IDF >= 5.x,
@@ -39,10 +36,8 @@ esphome:
     # [MOD] Own versioning starts here. 0.0.1 was the untouched upstream state.
     # 1.0 is reached once the original LCC's functions are fully reproduced
     # AND confirmed on the machine.
-    version: 0.9.1
+    version: 0.10.0
   name: smart-lcc
-  # [MOD] Unlike the personal build this appends the MAC suffix, so several
-  # boards can run on the same network without colliding on hostname and mDNS.
   name_add_mac_suffix: true
   platformio_options:
     build_flags:
@@ -75,9 +70,6 @@ wifi:
   id: wifi_component
   ssid: !secret wifi_ssid
   password: !secret wifi_password
-  # use_address is deliberately left out: that was the personal, DHCP-reserved
-  # address from openlcc.yaml and means nothing on a buyer's board. Without the
-  # line ESPHome simply uses DHCP plus mDNS (*.local).
   # [MOD] Otherwise ESPHome puts the ESP32 into a WiFi power-save mode that
   # raises latency on a weak signal. Counterproductive at around -90 dBm.
   power_save_mode: NONE
@@ -649,21 +641,18 @@ text_sensor:
       web_server:
         sorting_group_id: grp_betrieb
         sorting_weight: 10
-  # [MOD] Static, manually-maintained string - not queried live from the RP2040. Bump this by
-  # hand whenever RP2040_FIRMWARE_VERSION_STRING (open-lcc-rp2040-bianca/src/version.h) changes,
-  # same as this file's own esphome: project: version above. internal: true keeps it off the
-  # Home Assistant entity list; include_internal: true on web_server (see below) still shows it
-  # on this device's local web page.
-  - platform: template
-    name: RP2040 Firmware Version
-    id: rp2040_firmware_version
-    icon: "mdi:chip"
-    lambda: |-
-      return {"0.2.1"};
-    web_server:
-      sorting_group_id: grp_diag
-      sorting_weight: 65
-    internal: true
+    # [MOD] Live from the RP2040's status message (firmwareVersionMajor/Minor/Patch in
+    # esp-protocol.h) - no longer a manually-maintained string. internal: true keeps it off the
+    # Home Assistant entity list; include_internal: true on web_server (see below) still shows it
+    # on this device's local web page.
+    rp2040_firmware_version:
+      id: rp2040_firmware_version
+      name: RP2040 Firmware Version
+      icon: "mdi:chip"
+      web_server:
+        sorting_group_id: grp_diag
+        sorting_weight: 65
+      internal: true
 #  - platform: ble_scanner
 #    name: "BLE Devices Scanner"
 
@@ -679,13 +668,12 @@ binary_sensor:
         sorting_group_id: grp_betrieb
         sorting_weight: 70
       id: brewing
-      # [MOD] internal removed - basis for automations in Home Assistant
-      # [MOD] Remember the brew start and start pre-infusion if enabled
+      # [MOD] Accepted by RP2040; legacy fallback is handled in the component.
       on_press:
         - lambda: |-
             id(brew_start_ms) = millis();
-            // With an empty tank the pump does not run - then it is not a brew.
-            id(shot_valid) = !id(water_low_sens).state;
+            // Acceptance is resolved from one status packet by the component.
+            id(shot_valid) = true;
         - if:
             condition:
               and:
@@ -718,8 +706,8 @@ binary_sensor:
               - switch.turn_off: low_flow_sw
         - lambda: |-
             uint32_t dauer = (id(brew_end_ms) - id(brew_start_ms)) / 1000;
-            // shot_valid drops as soon as the tank reports empty during the brew -
-            // from that point on nothing was being pumped any more.
+            // Preserve upstream shot saving: a tank-low report during an accepted
+            // shot does not stop the RP2040, invalidate the timer or discard the count.
             if (id(shot_valid) && dauer >= (uint32_t) id(shot_min_s).state) {
               id(shots_total) += 1;
               id(shots_reset) += 1;
@@ -744,9 +732,8 @@ binary_sensor:
       # you can get notified. device_class: problem makes it appear there as
       # a fault rather than a plain on/off.
       device_class: problem
-      # [MOD] If the tank runs dry mid-brew, the rest is no longer a brew
-      on_press:
-        - lambda: 'id(shot_valid) = false;'
+      # [MOD] Warning only during a running shot: the RP2040 deliberately
+      # finishes it (shot saving). Tank-low still prevents accepting a new shot.
     # [MOD] New 2026-09-09: a one-time latch from the RP2040 (see esp-protocol.h's
     # ESPSystemStatusMessage::operationalReady) - true once the heat-up sequence has finished
     # AND the boiler has actually settled at target at least once since the last cold start or
@@ -1707,11 +1694,8 @@ display:
         return;
       }
 
-      // [MOD] The brew switch reports "brewing" even when the firmware does
-      // not let the pump start because the tank is empty. The timer therefore
-      // hangs on shot_valid, not on the raw switch signal - otherwise it
-      // would happily count up during a test with an empty tank.
-      bool show_timer = (id(brewing).state && !id(water_low_sens).state) ||
+      // Timer follows the accepted shot, not the raw lever or pump state.
+      bool show_timer = (id(brewing).state && id(shot_valid)) ||
                         (id(shot_valid) && id(brew_end_ms) > 0 &&
                          (millis() - id(brew_end_ms)) < 5000);
       bool show_ok = !show_timer && id(warm_ok_ms) > 0 &&

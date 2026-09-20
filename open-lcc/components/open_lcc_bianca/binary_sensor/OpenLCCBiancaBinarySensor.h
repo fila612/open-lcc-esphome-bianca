@@ -10,6 +10,7 @@
 #include "esphome/components/binary_sensor/binary_sensor.h"
 #include "esphome/core/helpers.h"
 #include "../esp-protocol.h"
+#include "../BrewStateTracker.h"
 #include "../OpenLCCBianca.h"
 
 namespace esphome {
@@ -22,8 +23,9 @@ namespace esphome {
             }
 
             void handleStatus(ESPSystemStatusMessage message) {
+                const bool active = brew_state_.update(message);
                 if (brewing_ != nullptr) {
-                    brewing_->publish_state(message.currentlyBrewing);
+                    brewing_->publish_state(active);
                 }
                 if (filling_service_boiler_ != nullptr) {
                     filling_service_boiler_->publish_state(message.currentlyFillingServiceBoiler);
@@ -50,6 +52,7 @@ namespace esphome {
             // [MOD] One-time latch, see esp-protocol.h's ESPSystemStatusMessage::operationalReady.
             void set_operational_ready(esphome::binary_sensor::BinarySensor *sens) { operational_ready_ = sens; }
         protected:
+            BrewStateTracker brew_state_;
             esphome::binary_sensor::BinarySensor *brewing_{nullptr};
             esphome::binary_sensor::BinarySensor *filling_service_boiler_{nullptr};
             esphome::binary_sensor::BinarySensor *water_tank_low_{nullptr};
