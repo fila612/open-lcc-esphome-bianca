@@ -44,11 +44,11 @@ namespace esphome {
                 ESP_LOGV("LCC", "Length: %lu", header.length);
 
                 if (header.error > ESP_DEBUG_LEVEL) {
-                    ESP_LOGD("LCC", "Debug error: %xu", header.error);
+                    ESP_LOGD("LCC", "Debug error: 0x%lx", header.error);
                 } else if (header.error > ESP_WARNING_LEVEL) {
-                    ESP_LOGW("LCC", "Warning: %xu", header.error);
+                    ESP_LOGW("LCC", "Warning: 0x%lx", header.error);
                 } else if (header.error != ESP_ERROR_NONE) {
-                    ESP_LOGE("LCC", "Error: %xu", header.error);
+                    ESP_LOGE("LCC", "Error: 0x%lx", header.error);
                 }
 
                 switch (header.type) {
@@ -138,7 +138,7 @@ namespace esphome {
                     nackMessage(header);
                 }
             } else {
-                ESP_LOGD("LCC", "Wrong length, expected at most %u, was %u", sizeof(ESPSystemStatusMessage), header->length);
+                ESP_LOGD("LCC", "Wrong length, expected at most %u, was %lu", sizeof(ESPSystemStatusMessage), header->length);
                 // [MOD] Still consume the bytes the sender says it sent, even though this build
                 // doesn't know how to interpret all of them (a newer RP2040 firmware than this
                 // ESP32 side knows about) - otherwise they'd desync the next message's parse, the
@@ -198,7 +198,7 @@ namespace esphome {
                     .int3 = 0x00000000,
             };
 
-            ESP_LOGD("LCC", "Sending Command of type %u with arg %u", payload.type, boolArg);
+            ESP_LOGD("LCC", "Sending Command of type %lu with arg %u", payload.type, boolArg);
 
             sendCommand(payload);
         }
@@ -217,7 +217,7 @@ namespace esphome {
                     .int3 = 0x00000000,
             };
 
-            ESP_LOGD("LCC", "Sending Command of type %u with arg %f", payload.type, floatArg);
+            ESP_LOGD("LCC", "Sending Command of type %lu with arg %f", payload.type, floatArg);
 
             sendCommand(payload);
         }
@@ -236,13 +236,13 @@ namespace esphome {
                     .int3 = 0x00000000,
             };
 
-            ESP_LOGD("LCC", "Sending Command of type %u with arg %x", payload.type, intArg);
+            ESP_LOGD("LCC", "Sending Command of type %lu with arg 0x%lx", payload.type, intArg);
 
             sendCommand(payload);
         }
 
         void OpenLCCBianca::sendCommand(ESPSystemCommandPayload payload) {
-            ESP_LOGD("LCC", "Sending Command of type %u", payload.type);
+            ESP_LOGD("LCC", "Sending Command of type %lu", payload.type);
 
             ESPMessageHeader commandHeader{
                     .direction = ESP_DIRECTION_ESP32_TO_RP2040,

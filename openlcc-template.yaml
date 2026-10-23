@@ -39,14 +39,11 @@ esphome:
     version: 0.10.0
   name: smart-lcc
   name_add_mac_suffix: true
-  platformio_options:
-    build_flags:
-      - -O2
-    build_unflags:
-      - -Os
-      - -Werror=all
-    board_build.flash_mode: dio
-    board_build.partitions: "../../../open-lcc/custom_partitions.csv"
+  # [MOD] Upstream's platformio_options block (build_flags -O2, build_unflags
+  #       -Os/-Werror=all, board_build.flash_mode/partitions) was removed: with
+  #       the native ESP-IDF toolchain none of it reached the build (verified
+  #       2026-10-23: every unit compiled with -Os, ESPHome's generated partition
+  #       table, DIO by default), and build_flags under it is removed in 2026.12.
   # [MOD] Compute the visible menu entries once at boot.
   on_boot:
     priority: -100
