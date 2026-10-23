@@ -1067,6 +1067,16 @@ sensor:
         sorting_group_id: grp_betrieb
         sorting_weight: 20
       id: coffee_boiler_sens
+      # [MOD] Home Assistant gets the resolution the OLED shows (one decimal),
+      # and only when that value changes - before, every float fluctuation
+      # became a new database row (about 1,100 per hour). The display reads the
+      # same filtered state; it prints "%.1f", so it looks exactly as before.
+      # state_class "" removes the default "measurement": no long-term
+      # statistics in Home Assistant, the short-term history stays.
+      state_class: ""
+      filters:
+        - round: 1
+        - delta: 0.05
     service_boiler_temperature:
       name: Service Boiler Temperature
       icon: "mdi:kettle-steam"
@@ -1074,6 +1084,12 @@ sensor:
         sorting_group_id: grp_betrieb
         sorting_weight: 40
       id: service_boiler_sens
+      # [MOD] Same as Coffee Boiler Temperature above. The display prints this
+      # one with "%.0f", so it is unaffected as well.
+      state_class: ""
+      filters:
+        - round: 1
+        - delta: 0.05
     external_temperature_1:
       name: E61 Outlet Temperature
       icon: "mdi:thermometer"
@@ -1181,7 +1197,8 @@ sensor:
     id: shots_total_sens
     accuracy_decimals: 0
     icon: "mdi:coffee"
-    state_class: "total_increasing"
+    # [MOD] state_class removed (was total_increasing): no long-term statistics
+    # in Home Assistant. The counter itself lives in flash on the device.
     update_interval: 60s
     lambda: 'return (float) id(shots_total);'
   - platform: template
