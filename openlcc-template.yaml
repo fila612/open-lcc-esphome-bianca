@@ -1342,47 +1342,61 @@ font:
     glyphs: "AERSTW"
 
 
-# ESPHome >= 2025 requires 'type:' per image; BINARY = 1-bit, right for a mono OLED
+# ESPHome >= 2025 requires 'type:' per image; BINARY = 1-bit, right for a mono OLED.
+# ESPHome >= 2026.10 makes images platforms of the 'image' component ('platform: file');
+# the old platform-less format is removed in 2027.1.0.
 image:
-  - file: "open-lcc/xbm/pump_on_2x.h"
+  - platform: file
+    file: "open-lcc/xbm/pump_on_2x.h"
     id: pump_on
     type: BINARY
   # [MOD] 8x8 variants for the OLED - the 2x images (16x16) were meant for
   #       the TFT and overlap inside the small visible window
-  - file: "open-lcc/xbm/pump_on.h"
+  - platform: file
+    file: "open-lcc/xbm/pump_on.h"
     id: pump_1x
     type: BINARY
   # [MOD] Coffee cup, 32x32. cup_steam_a/b are the two steam frames the
   # display alternates between while brewing.
-  - file: "open-lcc/xbm/cup_no_smoke.h"
+  - platform: file
+    file: "open-lcc/xbm/cup_no_smoke.h"
     id: cup_still
     type: BINARY
-  - file: "open-lcc/xbm/cup_smoke_1.h"
+  - platform: file
+    file: "open-lcc/xbm/cup_smoke_1.h"
     id: cup_steam_a
     type: BINARY
-  - file: "open-lcc/xbm/cup_smoke_2.h"
+  - platform: file
+    file: "open-lcc/xbm/cup_smoke_2.h"
     id: cup_steam_b
     type: BINARY
   # [MOD] 7x7 boiler symbols instead of the letters B and S
-  - file: "open-lcc/xbm/bssr_on.h"
+  - platform: file
+    file: "open-lcc/xbm/bssr_on.h"
     id: bssr_1x
     type: BINARY
-  - file: "open-lcc/xbm/sssr_on.h"
+  - platform: file
+    file: "open-lcc/xbm/sssr_on.h"
     id: sssr_1x
     type: BINARY
-  - file: "open-lcc/xbm/no_water.h"
+  - platform: file
+    file: "open-lcc/xbm/no_water.h"
     id: no_water_1x
     type: BINARY
-  - file: "open-lcc/xbm/no_water_2x.h"
+  - platform: file
+    file: "open-lcc/xbm/no_water_2x.h"
     id: no_water
     type: BINARY
-  - file: "open-lcc/xbm/eco_mode_2x.h"
+  - platform: file
+    file: "open-lcc/xbm/eco_mode_2x.h"
     id: eco_mode
     type: BINARY
-  - file: "open-lcc/xbm/bssr_on_2x.h"
+  - platform: file
+    file: "open-lcc/xbm/bssr_on_2x.h"
     id: bssr_on
     type: BINARY
-  - file: "open-lcc/xbm/sssr_on_2x.h"
+  - platform: file
+    file: "open-lcc/xbm/sssr_on_2x.h"
     id: sssr_on
     type: BINARY
 
