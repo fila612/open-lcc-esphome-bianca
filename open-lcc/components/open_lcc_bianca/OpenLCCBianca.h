@@ -62,8 +62,16 @@ namespace esphome {
                 this->on_status_update_callback_.add(std::move(callback));
             }
 
+            // [MOD] Whether the RP2040 firmware sends the standby fields (RP2040 >= 0.6.0). Fields
+            // are only ever appended to ESPSystemStatusMessage, so the length of the last status
+            // message tells which of them the running firmware knows about.
+            bool supports_standby() const {
+                return last_status_length_ >= offsetof(ESPSystemStatusMessage, plannedAutoStandbyInSeconds) + sizeof(uint16_t);
+            }
+
         private:
             bool enabled = true;
+            uint32_t last_status_length_{0};
 
             uint8_t *messageBuffer{nullptr};
 

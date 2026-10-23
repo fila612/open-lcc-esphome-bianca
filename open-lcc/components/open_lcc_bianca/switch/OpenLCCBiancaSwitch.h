@@ -31,6 +31,12 @@ namespace esphome {
                     sleep_mode_->publish_state(message.sleepMode);
                 }
 
+                // [MOD] Only RP2040 >= 0.6.0 reports standby. With an older firmware the switch
+                // never gets a state (shows as unknown) instead of a misleading "off".
+                if (standby_mode_ != nullptr && get_parent()->supports_standby()) {
+                    standby_mode_->publish_state(message.standbyMode);
+                }
+
                 if (low_flow_mode_ != nullptr) {
                     // Fix: Rueckmeldung war invertiert. set_low_flow_mode() sendet bei "an"
                     // den Modus PUMP_OFF_SOLENOID_OPEN - der Schalter muss also "an" melden,
@@ -54,6 +60,17 @@ namespace esphome {
                 });
             }
 
+            void set_standby_mode(LambdaSwitch *standby_mode) {
+                standby_mode_ = standby_mode;
+                standby_mode_->set_write_state_f([this](bool state) {
+                    if (!get_parent()->supports_standby()) {
+                        ESP_LOGW("LCC", "Standby needs RP2040 firmware >= 0.6.0, command not sent");
+                        return;
+                    }
+                    get_parent()->sendCommand(ESP_SYSTEM_COMMAND_SET_STANDBY_MODE, state);
+                });
+            }
+
             void set_low_flow_mode(LambdaSwitch *low_flow_mode) {
                 low_flow_mode_ = low_flow_mode;
                 low_flow_mode_->set_write_state_f([this](bool state) {
@@ -67,6 +84,7 @@ namespace esphome {
         protected:
             LambdaSwitch *eco_mode_{nullptr};
             LambdaSwitch *sleep_mode_{nullptr};
+            LambdaSwitch *standby_mode_{nullptr};
             LambdaSwitch *low_flow_mode_{nullptr};
         };
     }

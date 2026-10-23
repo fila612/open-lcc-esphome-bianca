@@ -14,11 +14,12 @@ The upstream `main` branch was the starting point. From there, this fork's goal 
 - **Sleep mode matching the original control panel**: the OLED turns off (not just the boiler) to avoid burn-in, and the +/- buttons now end sleep mode directly, the same as on the stock LCC panel — confirmed working on the machine.
 - **Shot counting and water-tank handling**: persistent shot counters across reboots and a minimum-shot-duration filter keep short flushes out of the count. A lever activation with tank-low already reported or without operational readiness is not treated as a valid shot. Once a shot is valid, a later tank-low report preserves its timer, counting eligibility and pre-infusion sequence, matching the RP2040's upstream shot-saving behavior. The tank warning remains visible; the RP2040 continues to block new shots while its tank-empty latch is active.
 - **A genuine one-time "OK" confirmation** when heat-up finishes (matching the original LCC), backed by a real latch on the RP2040 side (`operational_ready`) instead of a text-sensor edge trick — the latter used to re-flash "OK" every time the temperature briefly wobbled back into range during normal PID settling. **Requires RP2040 firmware v.0.2.1 or newer** from the companion repo above. The protocol still accepts older/stock RP2040 messages, but since ESPHome 0.9.2 the valid-shot logic also requires this readiness field: without it, the shot display/counting and automatically started pre-infusion remain inactive. RP2040 v.0.3.0 adds the 30-second stability requirement; v.0.4.0 adds live firmware-version reporting.
+- **Standby (both boilers off)** via Home Assistant, as a `Standby` switch plus an inverted `Machine Power` switch, with optional auto-standby. The +/- buttons and the brew lever wake the machine. **Requires RP2040 firmware v.0.6.0 or newer.** This is not a mains switch, see [Standby (0.11.0)](#standby-0110).
 - **Wi-Fi setup made resilient**: a fallback access point (`Smart-LCC Setup`) so a board that can't join the configured network is still reachable to set up Wi-Fi from a browser — the point for boards being sold, no rebuild needed — plus fixing `power_save_mode: NONE`, which ESPHome was silently ignoring and which raises latency on a weak signal.
 - **A new OLED display layout** designed for this hardware (large digits, icon set, sleep power-off, calibration view), plus a calibration frame to line up the visible area behind the case bezel and a runtime-toggleable verbose-log switch for diagnostics.
 - **Web server updated to v3** with a grouped, sortable card layout.
 
-Progress toward that parity goal is tracked via the project version in `openlcc.yaml` (currently 0.10.0, tag `v.0.10.0`; 1.0 marks full parity with the original LCC firmware, confirmed on the machine). The RP2040 side's own running firmware version is reported live (not a manually-maintained value) as a "RP2040 Firmware Version" text sensor — visible on this device's local web server.
+Progress toward that parity goal is tracked via the project version in `openlcc.yaml` (currently 0.11.0, tag `v.0.11.0`, on-machine validation of standby outstanding; 1.0 marks full parity with the original LCC firmware, confirmed on the machine). The RP2040 side's own running firmware version is reported live (not a manually-maintained value) as a "RP2040 Firmware Version" text sensor — visible on this device's local web server.
 
 `openlcc.yaml` is the active personal configuration and is deliberately ignored by Git.
 `openlcc-template.yaml` is its tracked, generic counterpart at the same functional version:
@@ -49,6 +50,38 @@ This connects to an expensive machine that runs on line voltage, hot pressurized
 ## Licensing
 
 The firmware itself is MIT licensed. Including GPL-licensed components (e.g. the serial bridge/stream server) makes the resulting firmware GPL. This only matters if you distribute it, not if you build and flash it for yourself.
+
+### Standby (0.11.0)
+
+Standby switches both boilers off. Sleep, by contrast, keeps the brew boiler at 70 °C.
+**Standby is not a mains switch.** The Gicar control board and both Open LCC boards stay
+powered, and the pump can still refill the service boiler. To disconnect the machine
+completely, a switched outlet is still needed.
+
+- `Standby`: on = heaters off. `Machine Power`: the same state inverted (on = heating).
+  `Auto Standby After`: minutes, 0 = off. `Auto-standby in`: remaining time.
+- Waking: the switch in Home Assistant, the +/- buttons, raising the brew lever, or cutting the power. The lever
+  only wakes the machine. The shot stays blocked until the machine is ready again and the
+  lever has been lowered once. A cold boiler gets the normal cold-start heat-up.
+- Standby takes precedence over sleep. Entering it ends sleep, and sleep cannot be switched
+  on while in standby. The OLED is off in both.
+- **Emergency exit:** cutting the power (main switch or outlet) always wakes the machine from
+  sleep or standby. After a crash and automatic restart of the controller, sleep or standby
+  is kept, so a crash never heats the machine up unattended.
+
+| | Sleep | Standby |
+|---|---|---|
+| Brew boiler | held at 70 °C | off |
+| Service boiler | off | off |
+| Back to brewing temperature | short reheat from 70 °C | full heat-up, from cold with the 130 °C sequence |
+| Typical use | short breaks during the day | evenings, nights, absence |
+| Automatic | `Auto Sleep After` | `Auto Standby After` (also counts while asleep) |
+| OLED | off | off |
+| Wake | HA, +/-, lever, power cycle | HA, +/-, lever, power cycle |
+
+The heater logic lives on the RP2040 (v.0.6.0). ESPHome detects support from the length of
+the status message. With an older RP2040 the standby entities simply have no state and send
+nothing. Everything else works unchanged, and no update order is required.
 
 ### Accepted brew status (0.10.0)
 

@@ -36,7 +36,7 @@ esphome:
     # [MOD] Own versioning starts here. 0.0.1 was the untouched upstream state.
     # 1.0 is reached once the original LCC's functions are fully reproduced
     # AND confirmed on the machine.
-    version: 0.10.0
+    version: 0.11.0
   name: smart-lcc
   name_add_mac_suffix: true
   # [MOD] Upstream's platformio_options block (build_flags -O2, build_unflags
@@ -194,13 +194,31 @@ switch:
         sorting_group_id: grp_betrieb
         sorting_weight: 120
       # [MOD] Turn the OLED off in sleep mode. Not just power: a static
-      # layout burns into an OLED over time.
+      # layout burns into an OLED over time. Decided together with standby
+      # in one place (script oled_power): entering standby ends sleep, and
+      # separate on/off actions per switch would race each other.
       on_turn_on:
         then:
-          - lambda: 'id(my_oled)->turn_off();'
+          - script.execute: oled_power
       on_turn_off:
         then:
-          - lambda: 'id(my_oled)->turn_on();'
+          - script.execute: oled_power
+    # [MOD] Standby: both boilers off (RP2040 >= 0.6.0). Not a mains switch -
+    # the Gicar board and both Open LCC boards stay powered. With an older
+    # RP2040 firmware this switch has no state and sends nothing.
+    standby_mode:
+      id: standby_mode_sw
+      name: Standby
+      icon: "mdi:power-standby"
+      web_server:
+        sorting_group_id: grp_betrieb
+        sorting_weight: 115
+      on_turn_on:
+        then:
+          - script.execute: oled_power
+      on_turn_off:
+        then:
+          - script.execute: oled_power
     low_flow_mode:
       id: low_flow_sw
       name: Low Flow
@@ -208,6 +226,23 @@ switch:
       web_server:
         sorting_group_id: grp_betrieb
         sorting_weight: 130
+  # [MOD] "Machine Power": the standby switch inverted (on = heating), as in
+  # Zendonir's fork. Only a second view of standby, no function of its own.
+  # Without standby support in the RP2040 firmware it has no state.
+  - platform: template
+    id: machine_power_sw
+    name: Machine Power
+    icon: "mdi:power"
+    lambda: |-
+      if (!id(lcc_1)->supports_standby()) return {};
+      return !id(standby_mode_sw).state;
+    turn_on_action:
+      - switch.turn_off: standby_mode_sw
+    turn_off_action:
+      - switch.turn_on: standby_mode_sw
+    web_server:
+      sorting_group_id: grp_betrieb
+      sorting_weight: 105
   # [MOD] Pre-infusion on/off - a plain flag, it controls nothing directly
   # [MOD] Calibration frame: draws a single rectangle inset by "Calibration
   # Inset" and shows that value large in the middle. Use it to measure which
@@ -392,6 +427,26 @@ select:
 # water line no pressure stands at that open valve. mode: restart so a
 # second brew start replaces the sequence still running.
 script:
+  # [MOD] OLED off while asleep or in standby, on otherwise.
+  - id: oled_power
+    then:
+      - lambda: |-
+          if (id(sleep_mode_sw).state || id(standby_mode_sw).state) {
+            id(my_oled)->turn_off();
+          } else {
+            id(my_oled)->turn_on();
+          }
+  # [MOD] Plus/Minus wake the machine: out of standby if it is in standby,
+  # otherwise out of sleep.
+  - id: wake_up
+    then:
+      - if:
+          condition:
+            switch.is_on: standby_mode_sw
+          then:
+            - switch.turn_off: standby_mode_sw
+          else:
+            - switch.turn_off: sleep_mode_sw
   - id: preinfusion
     mode: restart
     then:
@@ -816,12 +871,14 @@ binary_sensor:
         max_length: 500ms
         then:
           # [MOD] Match the original LCC panel: Plus/Minus end sleep mode
-          # instead of doing their normal function while asleep.
+          # (and standby) instead of doing their normal function.
           - if:
               condition:
-                switch.is_on: sleep_mode_sw
+                or:
+                  - switch.is_on: sleep_mode_sw
+                  - switch.is_on: standby_mode_sw
               then:
-                - switch.turn_off: sleep_mode_sw
+                - script.execute: wake_up
               else:
                 - if:
                     condition:
@@ -840,9 +897,11 @@ binary_sensor:
         then:
           - if:
               condition:
-                switch.is_on: sleep_mode_sw
+                or:
+                  - switch.is_on: sleep_mode_sw
+                  - switch.is_on: standby_mode_sw
               then:
-                - switch.turn_off: sleep_mode_sw
+                - script.execute: wake_up
               else:
                 - script.execute: ui_long
     internal: true
@@ -862,12 +921,14 @@ binary_sensor:
         max_length: 500ms
         then:
           # [MOD] Match the original LCC panel: Plus/Minus end sleep mode
-          # instead of doing their normal function while asleep.
+          # (and standby) instead of doing their normal function.
           - if:
               condition:
-                switch.is_on: sleep_mode_sw
+                or:
+                  - switch.is_on: sleep_mode_sw
+                  - switch.is_on: standby_mode_sw
               then:
-                - switch.turn_off: sleep_mode_sw
+                - script.execute: wake_up
               else:
                 - if:
                     condition:
@@ -886,9 +947,11 @@ binary_sensor:
         then:
           - if:
               condition:
-                switch.is_on: sleep_mode_sw
+                or:
+                  - switch.is_on: sleep_mode_sw
+                  - switch.is_on: standby_mode_sw
               then:
-                - switch.turn_off: sleep_mode_sw
+                - script.execute: wake_up
               else:
                 - script.execute: ui_long
     internal: true
@@ -967,6 +1030,17 @@ number:
       web_server:
         sorting_group_id: grp_config
         sorting_weight: 20
+      mode: box
+      entity_category: "config"
+    # [MOD] Auto-standby in minutes, 0 = off (RP2040 >= 0.6.0). Counts from
+    # the last lever activity or wake-up, also while asleep.
+    auto_standby_after:
+      id: asb
+      name: Auto Standby After
+      icon: "mdi:power-standby"
+      web_server:
+        sorting_group_id: grp_config
+        sorting_weight: 40
       mode: box
       entity_category: "config"
     coffee_boiler_temperature_set_point:
@@ -1115,6 +1189,20 @@ sensor:
       web_server:
         sorting_group_id: grp_config
         sorting_weight: 30
+      unit_of_measurement: "min"
+      accuracy_decimals: 0
+      filters:
+        - lambda: return x / 60;
+        - or:
+            - throttle: 60s
+            - delta: 0.45
+    # [MOD] Remaining auto-standby time (RP2040 >= 0.6.0); 0 when none is planned.
+    auto_standby_in:
+      name: Auto-standby in
+      icon: "mdi:timer-sand"
+      web_server:
+        sorting_group_id: grp_config
+        sorting_weight: 50
       unit_of_measurement: "min"
       accuracy_decimals: 0
       filters:
@@ -1774,6 +1862,8 @@ display:
         else if (lcc == "Heatup")                   st = de ? "Heizt"  : "Heating";
         else if (lcc == "Temperatures normalizing") st = de ? "Regelt" : "Settling";
         else if (lcc == "Sleeping")                 st = de ? "Schlaf" : "Sleep";
+        // [MOD] The OLED is off in standby; this only shows in the moment it switches.
+        else if (lcc == "Standby")                  st = "Standby";
         else if (lcc == "Bailed")                   st = "STOP";
         else if (lcc == "First run")                st = de ? "Start"  : "First run";
         it.print(17, 16, id(font1), st);

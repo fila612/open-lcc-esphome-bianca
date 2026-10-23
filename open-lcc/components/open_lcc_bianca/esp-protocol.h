@@ -87,7 +87,10 @@ enum ESPSystemCoalescedState: uint8_t {
     ESP_SYSTEM_COALESCED_STATE_WARM,
     ESP_SYSTEM_COALESCED_STATE_SLEEPING,
     ESP_SYSTEM_COALESCED_STATE_BAILED,
-    ESP_SYSTEM_COALESCED_STATE_FIRST_RUN
+    ESP_SYSTEM_COALESCED_STATE_FIRST_RUN,
+    // [MOD] Appended, never inserted: existing values must keep their numbers, or an older
+    // ESPHome build would e.g. show a machine in standby as "Bailed". RP2040 >= 0.6.0.
+    ESP_SYSTEM_COALESCED_STATE_STANDBY,
 };
 
 struct __attribute__((packed)) ESPSystemStatusMessage {
@@ -136,6 +139,12 @@ struct __attribute__((packed)) ESPSystemStatusMessage {
     uint8_t firmwareVersionMajor;
     uint8_t firmwareVersionMinor;
     uint8_t firmwareVersionPatch;
+    // [MOD] RP2040 >= 0.6.0: standby (both heaters off). Appended per the same backward-compat
+    // rule as operationalReady above; an older RP2040 firmware doesn't send these, so the
+    // receiving side sees a shorter message and can tell that standby isn't supported.
+    bool standbyMode;
+    uint16_t autoStandbyAfter;
+    uint16_t plannedAutoStandbyInSeconds;
     /*
      * To add:
      * Pid settings and pid parameters
@@ -156,6 +165,10 @@ enum ESPSystemCommandType: uint32_t {
     ESP_SYSTEM_COMMAND_CANCEL_ROUTINE,
     ESP_SYSTEM_COMMAND_FORCE_HARD_BAIL,
     ESP_SYSTEM_COMMAND_CLEAR_ROUTINE,
+    // [MOD] Appended, never inserted (RP2040 >= 0.6.0). An older RP2040 firmware acknowledges
+    // and ignores these.
+    ESP_SYSTEM_COMMAND_SET_STANDBY_MODE,
+    ESP_SYSTEM_COMMAND_SET_AUTO_STANDBY_MINUTES,
 };
 
 struct __attribute__((packed)) ESPSystemCommandPayload {

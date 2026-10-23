@@ -56,6 +56,8 @@ namespace esphome {
                         return "Bailed";
                     case ESP_SYSTEM_COALESCED_STATE_FIRST_RUN:
                         return "First run";
+                    case ESP_SYSTEM_COALESCED_STATE_STANDBY:
+                        return "Standby";
                 }
 
                 return "Unknown";

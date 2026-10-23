@@ -128,6 +128,7 @@ namespace esphome {
 
                 if (success) {
                     ackMessage(header);
+                    last_status_length_ = header->length;
 
 //                    ESP_LOGD("LCC", "SB High: %u", message.sbRawHi);
 //                    ESP_LOGD("LCC", "SB Low: %u", message.sbRawLo);

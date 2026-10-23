@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.11.0 — 2026-10-23
+
+Changes since v.0.10.0.
+
+### Behavior
+
+- New standby (both boilers off, RP2040 0.6.0+). Entities: `Standby`, inverted
+  `Machine Power`, `Auto Standby After`, `Auto-standby in`. LCC Status shows "Standby".
+- +/- end standby as well as sleep. The OLED is switched off in sleep and standby, decided
+  in one place (`oled_power` script) so the two switches cannot race.
+- Not a mains switch: Gicar and Open LCC boards stay powered.
+- Cutting the power always wakes the machine from sleep or standby (RP2040 0.6.0);
+  after a controller crash and automatic restart they are kept.
+
+### Compatibility
+
+- `esp-protocol.h` synchronized with RP2040 0.6.0. All new fields and IDs are appended.
+- Standby support is detected from the status message length. With older RP2040 firmware the
+  standby entities have no state and send no commands. Everything else is unchanged.
+
+### Validation
+
+- `esphome config` (openlcc.yaml, template) and `esphome compile` with ESPHome 2026.10.0
+  succeeded. Host check `tests/brew_state.cpp` passed.
+- Not yet validated on the machine.
+
 ## 0.10.0 — 2026-09-20
 
 Changes since v.0.9.3. Incorporates work developed locally as 0.9.4;
